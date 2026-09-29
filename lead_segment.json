@@ -1,0 +1,27 @@
+{
+  "_comment": "Criterio real, extraido via API del reporte 'Copia de Leads-Created-B2B_All-Unassigne' (Id 00OWP000003xuHN2AY) el 2026-09-08. Editar aqui para ajustar sin tocar codigo.",
+
+  "record_type_developer_name": "B2B_Company",
+
+  "_comment_unassigned_owners": "El 'unassigned' NO es un solo owner en este org: la mayoria de paises dejan el lead en manos del usuario de integracion que lo crea via API, pero Brasil tiene su propia asignacion automatica en Salesforce que lo manda directo a una Queue. Se listan todos los owners que cuentan como 'sin asignar de verdad' (descubierto el 2026-09-15 al ver que los leads de prueba de Brasil no entraban).",
+  "unassigned_owners": [
+    {
+      "type": "User",
+      "identifier": "integrationapi@openenglish.com",
+      "_comment": "Default para la mayoria de paises (Latam, etc). identifier = Username del User."
+    },
+    {
+      "type": "Queue",
+      "identifier": "Sales Leads B2B Brazil",
+      "_comment": "Brasil. identifier = Name de la Queue (Group con Type='Queue')."
+    }
+  ],
+
+  "excluded_statuses": [
+    "Dead lead - Closed",
+    "Dead Lead"
+  ],
+
+  "_comment_test_mode": "MODO PRUEBA (2026-09-15): restringe el bot solo a los leads del reporte 'Copy Leads-Created-B2B_All-Unassigned_TE' (Id 00OWP000005WQSj2AO), que se distinguen por utmSource__c = 'test'. Mientras este campo tenga un valor, el bot NO toca leads reales de produccion. Poner en '' o quitar la linea para volver a cubrir todo el trafico real.",
+  "utm_source": "test"
+}
