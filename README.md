@@ -106,13 +106,17 @@ no a un owner fijo:
    **Title** de Salesforce del equipo destino, usando
    [team_routing.json](team_routing.json):
    - Si el pais contiene `brazil`/`brasil` (sin tildes/mayusculas) →
-     `brasil_title` (hoy: `"B2B inbound Brasil"` — **con "s"**, asi esta el
-     Title real en Salesforce; ojo si lo cambian, el match es exacto).
+     `brasil_title` (hoy: `"Sales Development Representative - Inbound
+     (BR)"` — el match contra el Title real de Salesforce es exacto, ojo si
+     lo cambian ahi).
    - Cualquier otro pais (Colombia, Chile, Mexico, etc.) → `default_title`
-     (hoy: `"B2B inbound Latam"`).
-2. `salesforce.find_active_user_by_title(title)` busca el `User` activo con
-   ese `Title` exacto (hoy, una persona por equipo).
-3. `_validate_owner_title()` confirma que el usuario encontrado realmente
+     (hoy: `"Sales Development Representative - Inbound (LT)"`).
+2. `salesforce.find_active_users_by_title(title)` trae **todos** los `User`
+   activos con ese `Title` exacto (puede ser uno o varios).
+3. `_pick_next_owner()` (alias de `services/round_robin.py::pick_next`)
+   elige a cual de esos owners le toca el lead — ver "Reparto equitativo"
+   abajo.
+4. `_validate_owner_title()` confirma que el usuario elegido realmente
    tiene ese Title (defensa en profundidad).
 
 **Por que "contiene" y no igualdad exacta para Brasil**: el picklist de
@@ -127,10 +131,28 @@ tiene ningun usuario activo con ese Title, el lead queda `action=error` con
 el motivo explicito — nunca se asigna a ciegas ni cae a un owner por
 default.
 
-Cuando se necesite reparto entre **varias** personas del mismo equipo
-(round-robin o por menor carga), el unico punto de codigo a tocar es
-`salesforce.find_active_user_by_title()` (hoy toma la primera que encuentra
-por `LastModifiedDate`).
+## Reparto equitativo (round-robin) cuando hay varios owners por equipo
+
+[services/round_robin.py](services/round_robin.py) — cuando
+`find_active_users_by_title()` devuelve mas de un usuario activo con el
+mismo Title, se turnan en orden estable por `Id` (no por `Name` ni
+`LastModifiedDate`, que pueden cambiar y desordenar la rotacion): al primer
+lead le toca el primero de la lista, al siguiente el segundo, y asi
+sucesivamente, volviendo al principio al llegar al final.
+
+- El puntero de "a quien le toco la ultima vez" se guarda en
+  `round_robin_state.json` (uno por Title), para que la rotacion **sobreviva
+  reinicios del bot** — igual que el checkpoint del poller en
+  `poll_state.json`. No se versiona en git (ver `.gitignore`).
+- Si el owner que tenia el turno ya no aparece entre los activos con ese
+  Title (se desactivo, le cambiaron el equipo), la rotacion de ese equipo se
+  retoma desde el primero — no se rompe ni requiere intervencion manual.
+- Con un solo owner activo en el equipo, siempre se le asigna a esa persona
+  (no se toca el archivo de estado).
+- Si se necesita reparto por **menor carga** en vez de round-robin puro, el
+  unico punto de codigo a tocar es `pick_next()` en
+  `services/round_robin.py` — la llamada desde `services/lead_assignment.py`
+  no cambia.
 
 ## Notificaciones de Slack (DM al owner + registro en canal)
 

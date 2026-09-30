@@ -96,6 +96,22 @@ class SalesforceClient:
         )
         return records[0] if records else None
 
+    async def find_active_users_by_title(self, title: Optional[str]) -> list[dict[str, Any]]:
+        """Como find_active_user_by_title, pero trae TODOS los usuarios
+        activos con ese Title (no solo uno) — para poder repartir
+        equitativamente (round-robin) cuando hay mas de una persona en el
+        mismo equipo. Ver services/round_robin.py."""
+        logger.info("SF find_active_users_by_title: title=%s", title)
+        if not title:
+            return []
+
+        return await self.query_all(
+            "SELECT Id, Name, Email, IsActive, Title, Profile.Name, UserRole.Name "
+            "FROM User "
+            f"WHERE IsActive = true AND Title = {_soql_quote(title)} "
+            "ORDER BY Id ASC"
+        )
+
     async def get_record_type_id(self, developer_name: str) -> Optional[str]:
         if developer_name in self._record_type_ids:
             return self._record_type_ids[developer_name]

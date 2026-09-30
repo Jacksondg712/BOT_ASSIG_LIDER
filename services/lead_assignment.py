@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from config import lead_segment, settings, team_routing
 from models.schemas import LeadAssignmentResult
+from services.round_robin import pick_next as _pick_next_owner
 from services.salesforce_client import SalesforceApiError, SalesforceAuthError, SalesforceClient
 from services.slack_service import SlackService
 from utils.slack_formatter import (
@@ -92,8 +93,8 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
 
     country = lead.get("Country_of_Residence__c")
     target_title = _target_title_for_country(country)
-    owner = await salesforce.find_active_user_by_title(target_title)
-    if not owner:
+    candidates = await salesforce.find_active_users_by_title(target_title)
+    if not candidates:
         return LeadAssignmentResult(
             lead_id=lead_id,
             lead_name=lead_name,
@@ -105,6 +106,18 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
                 "con ese Title en team_routing.json."
             ),
         )
+
+    # Si hay mas de un owner activo con ese Title, se reparte equitativo
+    # (round-robin) en vez de siempre caer en el mismo — ver
+    # services/round_robin.py. Con un solo candidato, devuelve siempre ese.
+    #
+    # Nota: el puntero de rotacion avanza aqui, al elegir, no recien cuando
+    # se confirma el PATCH en Salesforce. Si algo falla despues (Title
+    # invalido, error de Salesforce), este intento "gasto su turno" en la
+    # rotacion igual — se acepto este trade-off por simplicidad, ya que esos
+    # fallos deberian ser raros/transitorios y el lead se reintenta solo en
+    # el siguiente ciclo (con el siguiente owner en turno).
+    owner = _pick_next_owner(target_title, candidates)
 
     valid, reason = _validate_owner_title(owner, target_title)
     if not valid:
