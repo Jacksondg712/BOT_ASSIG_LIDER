@@ -22,6 +22,31 @@
     "Dead Lead"
   ],
 
-  "_comment_test_mode": "MODO PRUEBA (2026-09-15): restringe el bot solo a los leads del reporte 'Copy Leads-Created-B2B_All-Unassigned_TE' (Id 00OWP000005WQSj2AO), que se distinguen por utmSource__c = 'test'. Mientras este campo tenga un valor, el bot NO toca leads reales de produccion. Poner en '' o quitar la linea para volver a cubrir todo el trafico real.",
-  "utm_source": "test"
+  "_comment_test_mode": "Modo prueba (dejar vacio '' para produccion): si se pone un valor, el bot SOLO procesa leads con ese utmSource__c exacto (se uso 'test' para probar con el reporte copia 'Copy Leads-Created-B2B_All-Unassigned_TE', Id 00OWP000005WQSj2AO). Vacio = cubre todo el trafico real.",
+  "utm_source": "",
+
+  "_comment_quality_filters": "PRODUCCION (2026-09-30): exclusiones de calidad de dato que SI tenia el reporte original y el bot no replicaba mientras estaba en modo prueba. Todas las comparaciones son 'contiene' (o 'no contiene'), sin tildes/mayusculas — no igualdad exacta, porque los campos de texto libre llegan inconsistentes.",
+  "quality_filters": {
+    "email_company_excluded_keywords": ["test", "openenglish"],
+    "_comment_email_company": "Solo se revisa el Email (NO el Company): un lead con apellido/empresa que contenga 'test' como substring (ej. 'Alfredo Testa', 'Contesta SAS') es un falso positivo real que se encontro probando antes de ir a produccion (2026-09-30). El email SI es una senal confiable de prueba/interno (ej. '+test@', '@openenglish.com').",
+
+    "excluded_country_keywords": [
+      "congo", "cuba", "iraq", "libano", "libia", "mali", "nicaragua",
+      "republica centroafricana", "somalia", "sudan", "turquia", "ucrania",
+      "yemen", "zimbabue", "vietnam"
+    ],
+    "_comment_countries": "Paises restringidos del reporte original. Se compara contra Country_of_Residence__c por 'contiene' (ej. 'La Habana, Cuba' tambien queda excluido).",
+
+    "utm_source_excluded_keywords": ["event"],
+    "_comment_utm_source": "Trafico de campanas/eventos de marketing, fuera del alcance de este bot.",
+
+    "landing_page_required_keywords": [],
+    "_comment_landing_required": "DESACTIVADO (2026-09-30): se encontro un lead real de Arabia Saudi valido que llego por 'openenglish.com/ar' (sin 'para-empresas' en la URL) y el filtro lo hubiera excluido por error. No se puede predecir todas las variantes regionales de URL sin mas datos. Vacio = no exigir nada. El resto de filtros (pais, email/company de prueba, utm de eventos, campana propia) siguen aplicando.",
+
+    "landing_page_excluded_keywords": ["leadform", "para-empresas/eventos/"],
+    "_comment_landing_excluded": "'leadform' es el formulario que llenan los vendedores directamente (esos leads ya nacen asignados a un vendedor real, no deberian llegar aqui, pero se excluye por seguridad). 'eventos' son leads de eventos presenciales.",
+
+    "campaign_field_must_be_empty": true,
+    "_comment_campaign": "LR_Lead_Campaign__c debe estar vacio — un lead con campana asignada ya tiene su propio flujo de asignacion, fuera del alcance de este bot."
+  }
 }

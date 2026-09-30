@@ -260,7 +260,80 @@ def _lead_matches_target_segment(lead: dict) -> Optional[str]:
             f"'{lead.get('utmSource__c')}', no coincide."
         )
 
+    quality_reason = _quality_filter_rejection_reason(lead)
+    if quality_reason:
+        return quality_reason
+
     return None
+
+
+def _quality_filter_rejection_reason(lead: dict) -> Optional[str]:
+    """Replica las exclusiones de calidad de dato del reporte de produccion
+    original (emails/companies de prueba, paises restringidos, trafico de
+    eventos, leads con campana propia) — ver quality_filters en
+    lead_segment.json. Devuelve None si el lead pasa todos los filtros."""
+    filters = lead_segment.get("quality_filters", {})
+    if not filters:
+        return None
+
+    # Solo Email, NO Company: un nombre/empresa real puede contener "test"
+    # como substring sin ser de prueba (ej. "Alfredo Testa", "Contesta SAS")
+    # — se encontro este falso positivo probando en seco antes de ir a
+    # produccion (2026-09-30). El email SI es una senal confiable (emails
+    # internos tipo "+test@" o "@openenglish.com").
+    email_excluded = filters.get("email_company_excluded_keywords", [])
+    if _contains_any(lead.get("Email"), email_excluded):
+        return (
+            "Excluido por filtro de calidad: Email contiene una "
+            f"palabra de prueba/interna ({email_excluded})."
+        )
+
+    excluded_countries = filters.get("excluded_country_keywords", [])
+    if _contains_any(lead.get("Country_of_Residence__c"), excluded_countries):
+        return (
+            f"Excluido por filtro de calidad: pais restringido "
+            f"('{lead.get('Country_of_Residence__c')}')."
+        )
+
+    utm_excluded = filters.get("utm_source_excluded_keywords", [])
+    if _contains_any(lead.get("utmSource__c"), utm_excluded):
+        return (
+            f"Excluido por filtro de calidad: utmSource__c "
+            f"('{lead.get('utmSource__c')}') es trafico de campana/evento."
+        )
+
+    landing_page = lead.get("landingPagesCurrentIndex__c")
+    required_landing_keywords = filters.get("landing_page_required_keywords", [])
+    if required_landing_keywords and not _contains_any(landing_page, required_landing_keywords):
+        return (
+            f"Excluido por filtro de calidad: landingPagesCurrentIndex__c "
+            f"('{landing_page}') no es una landing page de tipo para-empresas."
+        )
+
+    excluded_landing_keywords = filters.get("landing_page_excluded_keywords", [])
+    if _contains_any(landing_page, excluded_landing_keywords):
+        return (
+            f"Excluido por filtro de calidad: landingPagesCurrentIndex__c "
+            f"('{landing_page}') esta en la lista de landing pages excluidas."
+        )
+
+    if filters.get("campaign_field_must_be_empty") and lead.get("LR_Lead_Campaign__c"):
+        return (
+            "Excluido por filtro de calidad: LR_Lead_Campaign__c no esta "
+            f"vacio ('{lead.get('LR_Lead_Campaign__c')}') — ese lead tiene su "
+            "propio flujo de asignacion por campana."
+        )
+
+    return None
+
+
+def _contains_any(value: object, keywords: list) -> bool:
+    if not keywords:
+        return False
+    normalized_value = _normalized(value)
+    if not normalized_value:
+        return False
+    return any(_normalized(keyword) in normalized_value for keyword in keywords if keyword)
 
 
 def _owner_is_unassigned(owner: object) -> bool:

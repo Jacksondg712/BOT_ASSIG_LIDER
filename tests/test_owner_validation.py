@@ -160,5 +160,123 @@ class LeadMatchesTargetSegmentTests(unittest.TestCase):
         self.assertIsNone(reason)
 
 
+class QualityFilterTests(unittest.TestCase):
+    """Filtros de calidad de dato de produccion (test/openenglish,
+    paises restringidos, campanas/eventos, landing page, LR_Lead_Campaign__c)
+    — ver lead_segment.json -> quality_filters."""
+
+    BASE_SEGMENT = {
+        "record_type_developer_name": "B2B_Company",
+        "unassigned_owners": [{"type": "User", "identifier": "integrationapi@openenglish.com"}],
+        "excluded_statuses": [],
+    }
+
+    def _lead(self, **overrides):
+        lead = {
+            "RecordType": {"DeveloperName": "B2B_Company", "Name": "B2B Company"},
+            "Owner": {
+                "Username": "integrationapi@openenglish.com",
+                "Name": "Salesforce Integration API",
+                "Type": "User",
+            },
+            "OwnerId": "0050Z000008e7RPQAY",
+            "Status": "Prospect",
+            "Email": "real.contact@acme.com",
+            "Company": "Acme Corp",
+            "Country_of_Residence__c": "Colombia",
+            "utmSource__c": "google",
+            "landingPagesCurrentIndex__c": "www.openenglish.com/para-empresas/",
+            "LR_Lead_Campaign__c": None,
+        }
+        lead.update(overrides)
+        return lead
+
+    def _segment(self, **quality_filter_overrides):
+        filters = {
+            "email_company_excluded_keywords": ["test", "openenglish"],
+            "excluded_country_keywords": ["cuba", "iraq"],
+            "utm_source_excluded_keywords": ["event"],
+            "landing_page_required_keywords": ["para-empresas"],
+            "landing_page_excluded_keywords": ["leadform"],
+            "campaign_field_must_be_empty": True,
+        }
+        filters.update(quality_filter_overrides)
+        return {**self.BASE_SEGMENT, "quality_filters": filters}
+
+    def test_lead_passing_all_quality_filters_is_accepted(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(self._lead())
+        self.assertIsNone(reason)
+
+    def test_no_quality_filters_configured_is_a_noop(self):
+        with patch.object(lead_assignment, "lead_segment", self.BASE_SEGMENT):
+            reason = lead_assignment._lead_matches_target_segment(self._lead(Email="test@openenglish.com"))
+        self.assertIsNone(reason)
+
+    def test_test_email_is_rejected(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(self._lead(Email="someone+test@gmail.com"))
+        self.assertIsNotNone(reason)
+        self.assertIn("calidad", reason)
+
+    def test_openenglish_email_is_rejected(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(self._lead(Email="staff@openenglish.com"))
+        self.assertIsNotNone(reason)
+
+    def test_company_containing_test_as_substring_is_not_a_false_positive(self):
+        """Regresion: 'Alfredo Testa' / 'Contesta SAS' son empresas/apellidos
+        reales que contienen 'test' como substring — el filtro NO debe
+        revisar Company, solo Email, para no rechazarlos por error."""
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(
+                self._lead(Company="ALFREDO TESTA", Email="real.contact@acme.com")
+            )
+        self.assertIsNone(reason)
+
+    def test_restricted_country_is_rejected_even_as_substring(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(
+                self._lead(Country_of_Residence__c="La Habana, Cuba")
+            )
+        self.assertIsNotNone(reason)
+        self.assertIn("pais restringido", reason)
+
+    def test_event_utm_source_is_rejected(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(self._lead(utmSource__c="facebook-event"))
+        self.assertIsNotNone(reason)
+
+    def test_missing_required_landing_page_keyword_is_rejected(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(
+                self._lead(landingPagesCurrentIndex__c="www.openenglish.com/promociones/")
+            )
+        self.assertIsNotNone(reason)
+        self.assertIn("para-empresas", reason)
+
+    def test_excluded_landing_page_keyword_is_rejected(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(
+                self._lead(landingPagesCurrentIndex__c="www.openenglish.com/para-empresas/leadform/")
+            )
+        self.assertIsNotNone(reason)
+
+    def test_non_empty_campaign_field_is_rejected(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment()):
+            reason = lead_assignment._lead_matches_target_segment(
+                self._lead(LR_Lead_Campaign__c="CAMP-2026-01")
+            )
+        self.assertIsNotNone(reason)
+        self.assertIn("LR_Lead_Campaign__c", reason)
+
+    def test_campaign_field_check_disabled_accepts_non_empty_value(self):
+        with patch.object(lead_assignment, "lead_segment", self._segment(campaign_field_must_be_empty=False)):
+            reason = lead_assignment._lead_matches_target_segment(
+                self._lead(LR_Lead_Campaign__c="CAMP-2026-01")
+            )
+        self.assertIsNone(reason)
+
+
 if __name__ == "__main__":
     unittest.main()
