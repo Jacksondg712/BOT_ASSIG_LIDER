@@ -2,9 +2,9 @@
   "_comment": "Enruta el owner del Lead segun Country_of_Residence__c. Reemplaza al owner fijo (LEADER_TEST_OWNER_EMAIL/NAME, ya no se usa). Editar aqui para agregar equipos/paises sin tocar codigo.",
 
   "_comment_brasil": "El campo en Salesforce es un picklist en espanol (valor real 'Brasil'), pero los Leads que llegan por la API de captura traen Country_of_Residence__c en texto libre e inconsistente (ej. 'Brazil', 'Sao Paulo, Brazil', 'Brasil'). Por eso Brasil se detecta por 'contiene' (sin tildes/mayusculas, incluyendo la grafia en ingles que llega en los datos), no por igualdad exacta.",
-  "brasil_title": "B2B inbound Brasil",
+  "brasil_title": "Sales Development Representative - Inbound (BR)",
   "brasil_keywords": ["brazil", "brasil"],
 
   "_comment_default": "Todo pais que NO matchee brasil_keywords (Colombia, Chile, Mexico, etc.) cae aqui.",
-  "default_title": "B2B inbound Latam"
+  "default_title": "Sales Development Representative - Inbound (LT)"
 }
