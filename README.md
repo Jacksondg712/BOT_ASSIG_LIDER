@@ -177,6 +177,12 @@ Token Scopes usados: `chat:write`, `im:write`, `users:read`,
   link al Lead, y un post en el canal con header, link, a quien se asigno
   (con `@mencion` si se encuentra su usuario de Slack por email) y el motivo
   de la validacion.
+- **Zona horaria fija: Bogota** (todos los SDR estan ahi) — las fechas de
+  los mensajes (`_now_label()` en `slack_formatter.py`) siempre se muestran
+  en `America/Bogota`, sin importar en que servidor/zona horaria corra el
+  bot. Requiere el paquete `tzdata` (ya en `requirements.txt`) para que
+  funcione igual en cualquier maquina, incluyendo Windows sin base de datos
+  de zonas horarias propia.
 
 ### Probar el envio sin tocar Salesforce
 

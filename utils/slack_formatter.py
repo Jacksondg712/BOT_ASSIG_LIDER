@@ -6,8 +6,13 @@ logica de asignacion. `details` es el dict que arma
 job_title, employees, status) — agregar/quitar lineas aqui.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+# Todos los SDR estan en Bogota — las fechas de los mensajes de Slack
+# siempre se muestran en esta zona horaria, sin importar donde corra el bot.
+_BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 
 def lead_url(base_url: str, lead_id: str) -> str:
@@ -91,4 +96,4 @@ def format_channel_fallback_text(lead_name: str, owner_name: str) -> str:
 
 
 def _now_label() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return datetime.now(_BOGOTA_TZ).strftime("%Y-%m-%d %H:%M") + " hora Bogotá"
