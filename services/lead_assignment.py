@@ -367,15 +367,23 @@ def _nested_field(value: object, field: str) -> Optional[str]:
 def _target_title_for_country(country: Optional[str]) -> str:
     """Resuelve a que equipo (Title de Salesforce) va el lead segun su pais.
 
-    Brasil se detecta por 'contiene' (brasil_keywords en team_routing.json),
-    no por igualdad exacta, porque Country_of_Residence__c llega con datos
-    inconsistentes desde la API de captura (ej. 'Brazil', 'Sao Paulo,
-    Brazil', 'Brasil' del picklist) — ver team_routing.json.
+    Brasil y USA se detectan por 'contiene' (brasil_keywords / usa_keywords
+    en team_routing.json), no por igualdad exacta, porque
+    Country_of_Residence__c llega con datos inconsistentes desde la API de
+    captura (ej. 'Brazil', 'Sao Paulo, Brazil', 'Brasil' del picklist; o
+    'USA', 'United States', 'Estados Unidos de America') — ver
+    team_routing.json. Cualquier otro pais de Latam cae en default_title.
     """
     normalized_country = _normalized(country)
-    keywords = team_routing.get("brasil_keywords", [])
-    if any(_normalized(keyword) in normalized_country for keyword in keywords if keyword):
+
+    brasil_keywords = team_routing.get("brasil_keywords", [])
+    if any(_normalized(keyword) in normalized_country for keyword in brasil_keywords if keyword):
         return team_routing["brasil_title"]
+
+    usa_keywords = team_routing.get("usa_keywords", [])
+    if usa_keywords and any(_normalized(keyword) in normalized_country for keyword in usa_keywords if keyword):
+        return team_routing.get("usa_title") or team_routing["default_title"]
+
     return team_routing["default_title"]
 
 

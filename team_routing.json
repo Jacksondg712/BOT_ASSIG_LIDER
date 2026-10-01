@@ -5,6 +5,10 @@
   "brasil_title": "Sales Development Representative - Inbound (BR)",
   "brasil_keywords": ["brazil", "brasil"],
 
-  "_comment_default": "Todo pais que NO matchee brasil_keywords (Colombia, Chile, Mexico, etc.) cae aqui.",
+  "_comment_usa": "Agregado 2026-10-01: Estados Unidos tiene su propio titulo/equipo, separado del resto de Latam, aunque sigue siendo una variante del mismo rol LT. Mismo criterio de deteccion 'contiene' que Brasil, por la misma inconsistencia de datos (ej. 'USA', 'United States', 'Estados Unidos de America').",
+  "usa_title": "Sales Development Representative - Inbound (LT) (US)",
+  "usa_keywords": ["usa", "united states", "estados unidos", "eeuu", "ee.uu"],
+
+  "_comment_default": "Todo pais que NO matchee brasil_keywords ni usa_keywords (Colombia, Chile, Mexico, etc.) cae aqui.",
   "default_title": "Sales Development Representative - Inbound (LT)"
 }

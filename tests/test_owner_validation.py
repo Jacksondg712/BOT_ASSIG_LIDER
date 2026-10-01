@@ -41,6 +41,8 @@ class TargetTitleForCountryTests(unittest.TestCase):
     ROUTING = {
         "brasil_title": "B2B inbound Brasil",
         "brasil_keywords": ["brazil", "brasil"],
+        "usa_title": "B2B inbound Latam (US)",
+        "usa_keywords": ["usa", "united states", "estados unidos", "eeuu", "ee.uu"],
         "default_title": "B2B inbound Latam",
     }
 
@@ -71,6 +73,47 @@ class TargetTitleForCountryTests(unittest.TestCase):
         with patch.object(lead_assignment, "team_routing", self.ROUTING):
             title = lead_assignment._target_title_for_country(None)
         self.assertEqual(title, "B2B inbound Latam")
+
+    def test_usa_abbreviation_routes_to_usa_team(self):
+        with patch.object(lead_assignment, "team_routing", self.ROUTING):
+            title = lead_assignment._target_title_for_country("USA")
+        self.assertEqual(title, "B2B inbound Latam (US)")
+
+    def test_united_states_full_name_routes_to_usa_team(self):
+        with patch.object(lead_assignment, "team_routing", self.ROUTING):
+            title = lead_assignment._target_title_for_country("United States")
+        self.assertEqual(title, "B2B inbound Latam (US)")
+
+    def test_spanish_estados_unidos_routes_to_usa_team(self):
+        with patch.object(lead_assignment, "team_routing", self.ROUTING):
+            title = lead_assignment._target_title_for_country("Estados Unidos de América")
+        self.assertEqual(title, "B2B inbound Latam (US)")
+
+    def test_city_comma_usa_variant_routes_to_usa_team(self):
+        with patch.object(lead_assignment, "team_routing", self.ROUTING):
+            title = lead_assignment._target_title_for_country("Miami, USA")
+        self.assertEqual(title, "B2B inbound Latam (US)")
+
+    def test_no_usa_keywords_configured_falls_back_to_default(self):
+        """Compatibilidad hacia atras: si team_routing.json no tiene
+        usa_keywords (configuracion vieja, sin el equipo de USA), nunca debe
+        romper — USA simplemente cae en default_title como cualquier otro
+        pais de Latam."""
+        routing_without_usa = {
+            "brasil_title": "B2B inbound Brasil",
+            "brasil_keywords": ["brazil", "brasil"],
+            "default_title": "B2B inbound Latam",
+        }
+        with patch.object(lead_assignment, "team_routing", routing_without_usa):
+            title = lead_assignment._target_title_for_country("USA")
+        self.assertEqual(title, "B2B inbound Latam")
+
+    def test_brasil_is_checked_before_usa_when_both_could_match(self):
+        """No deberia haber solapamiento real, pero confirma el orden:
+        Brasil tiene prioridad sobre USA en la resolucion."""
+        with patch.object(lead_assignment, "team_routing", self.ROUTING):
+            title = lead_assignment._target_title_for_country("Brasil")
+        self.assertEqual(title, "B2B inbound Brasil")
 
 
 class LeadMatchesTargetSegmentTests(unittest.TestCase):
