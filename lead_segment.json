@@ -31,11 +31,11 @@
     "_comment_email_company": "Solo se revisa el Email (NO el Company): un lead con apellido/empresa que contenga 'test' como substring (ej. 'Alfredo Testa', 'Contesta SAS') es un falso positivo real que se encontro probando antes de ir a produccion (2026-09-30). El email SI es una senal confiable de prueba/interno (ej. '+test@', '@openenglish.com').",
 
     "excluded_country_keywords": [
-      "congo", "cuba", "iraq", "libano", "libia", "mali", "nicaragua",
+      "congo", "iraq", "libano", "libia", "mali",
       "republica centroafricana", "somalia", "sudan", "turquia", "ucrania",
       "yemen", "zimbabue", "vietnam"
     ],
-    "_comment_countries": "Paises restringidos del reporte original. Se compara contra Country_of_Residence__c por 'contiene' (ej. 'La Habana, Cuba' tambien queda excluido).",
+    "_comment_countries": "Paises restringidos del reporte original. Se compara contra Country_of_Residence__c por 'contiene'. Nicaragua y Cuba se quitaron el 2026-09-30: el bot es para asignaciones de Latam en general, ambos son parte de Latam y no deben excluirse.",
 
     "utm_source_excluded_keywords": ["event"],
     "_comment_utm_source": "Trafico de campanas/eventos de marketing, fuera del alcance de este bot.",
