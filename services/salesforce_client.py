@@ -98,18 +98,24 @@ class SalesforceClient:
         return records[0] if records else None
 
     async def find_active_users_by_title(self, title: Optional[str]) -> list[dict[str, Any]]:
-        """Como find_active_user_by_title, pero trae TODOS los usuarios
-        activos con ese Title (no solo uno) — para poder repartir
-        equitativamente (round-robin) cuando hay mas de una persona en el
-        mismo equipo. Ver services/round_robin.py."""
-        logger.info("SF find_active_users_by_title: title=%s", title)
-        if not title:
+        """Trae TODOS los usuarios activos con ese Title (ver
+        find_active_users_by_titles para varios titulos a la vez)."""
+        return await self.find_active_users_by_titles([title] if title else [])
+
+    async def find_active_users_by_titles(self, titles: Iterable[str]) -> list[dict[str, Any]]:
+        """Trae TODOS los usuarios activos cuyo Title sea CUALQUIERA de
+        `titles` — para repartir equitativamente (round-robin) entre varios
+        titulos que trabajan el mismo flujo (ej. Latam = (LT) + (LT) (US)).
+        Ver services/round_robin.py."""
+        titles_list = [title for title in titles if title]
+        logger.info("SF find_active_users_by_titles: titles=%s", titles_list)
+        if not titles_list:
             return []
 
         return await self.query_all(
             "SELECT Id, Name, Email, IsActive, Title, Profile.Name, UserRole.Name "
             "FROM User "
-            f"WHERE IsActive = true AND Title = {_soql_quote(title)} "
+            f"WHERE IsActive = true AND Title IN ({_csv_quoted(titles_list)}) "
             "ORDER BY Id ASC"
         )
 

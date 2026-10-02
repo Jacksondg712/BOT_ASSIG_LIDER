@@ -101,23 +101,27 @@ solo se usa para aislar leads de prueba con un filtro extra
 Desde el 2026-09-15, el bot enruta el lead segun `Country_of_Residence__c`,
 no a un owner fijo:
 
-1. `_target_title_for_country()` en
-   [services/lead_assignment.py](services/lead_assignment.py) decide el
-   **Title** de Salesforce del equipo destino, usando
+1. `_target_titles_for_country()` en
+   [services/lead_assignment.py](services/lead_assignment.py) decide la
+   **lista de Titles** que trabajan el lead, usando
    [team_routing.json](team_routing.json):
-   - Si el pais contiene `brazil`/`brasil` (sin tildes/mayusculas) →
-     `brasil_title` (hoy: `"Sales Development Representative - Inbound
-     (BR)"` — el match contra el Title real de Salesforce es exacto, ojo si
-     lo cambian ahi).
-   - Cualquier otro pais (Colombia, Chile, Mexico, etc.) → `default_title`
-     (hoy: `"Sales Development Representative - Inbound (LT)"`).
-2. `salesforce.find_active_users_by_title(title)` trae **todos** los `User`
-   activos con ese `Title` exacto (puede ser uno o varios).
+
+   | Pais del lead | Titles del pool |
+   |---|---|
+   | contiene `brazil`/`brasil` | `brasil_titles`: `(BR)` |
+   | contiene `usa`/`united states`/`estados unidos`/... | `usa_titles`: **solo** `(LT) (US)` |
+   | cualquier otro (Colombia, Venezuela, Chile, Nicaragua...) | `default_titles`: `(LT)` **+** `(LT) (US)` juntos |
+
+   Es decir: los `(LT) (US)` son los **unicos** que reciben USA, pero
+   **tambien** entran al reparto equitativo de Latam junto con los `(LT)`.
+2. `salesforce.find_active_users_by_titles(titles)` trae **todos** los
+   `User` activos cuyo `Title` sea cualquiera de esa lista (`Title IN (...)`).
 3. `_pick_next_owner()` (alias de `services/round_robin.py::pick_next`)
-   elige a cual de esos owners le toca el lead — ver "Reparto equitativo"
-   abajo.
-4. `_validate_owner_title()` confirma que el usuario elegido realmente
-   tiene ese Title (defensa en profundidad).
+   elige a cual le toca el lead — ver "Reparto equitativo" abajo. La
+   rotacion se lleva **por pool** (la clave es la lista de titles unida), asi
+   que Latam rota entre (LT)+(US) y USA/Brasil tienen su propia rotacion.
+4. `_validate_owner_title()` confirma que el usuario elegido tiene alguno de
+   los Titles esperados (defensa en profundidad).
 
 **Por que "contiene" y no igualdad exacta para Brasil**: el picklist de
 Salesforce tiene el valor en español (`"Brasil"`), pero los Leads que llegan

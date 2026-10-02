@@ -92,8 +92,9 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
         )
 
     country = lead.get("Country_of_Residence__c")
-    target_title = _target_title_for_country(country)
-    candidates = await salesforce.find_active_users_by_title(target_title)
+    target_titles = _target_titles_for_country(country)
+    team_label = " + ".join(target_titles)
+    candidates = await salesforce.find_active_users_by_titles(target_titles)
     if not candidates:
         return LeadAssignmentResult(
             lead_id=lead_id,
@@ -101,15 +102,17 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
             action="error",
             reason=(
                 f"No encontre un usuario activo en Salesforce con Title "
-                f"'{target_title}' (equipo resuelto para el pais '{country}'). "
+                f"'{team_label}' (equipo resuelto para el pais '{country}'). "
                 "Verifica que ese equipo tenga al menos una persona activa "
-                "con ese Title en team_routing.json."
+                "con alguno de esos Titles en team_routing.json."
             ),
         )
 
-    # Si hay mas de un owner activo con ese Title, se reparte equitativo
+    # Si hay mas de un owner activo en el pool (que puede juntar varios
+    # Titles, ej. Latam = (LT) + (LT) (US)), se reparte equitativo
     # (round-robin) en vez de siempre caer en el mismo — ver
     # services/round_robin.py. Con un solo candidato, devuelve siempre ese.
+    # La rotacion se lleva por pool (clave = team_label), no por Title suelto.
     #
     # Nota: el puntero de rotacion avanza aqui, al elegir, no recien cuando
     # se confirma el PATCH en Salesforce. Si algo falla despues (Title
@@ -117,9 +120,9 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
     # rotacion igual — se acepto este trade-off por simplicidad, ya que esos
     # fallos deberian ser raros/transitorios y el lead se reintenta solo en
     # el siguiente ciclo (con el siguiente owner en turno).
-    owner = _pick_next_owner(target_title, candidates)
+    owner = _pick_next_owner(team_label, candidates)
 
-    valid, reason = _validate_owner_title(owner, target_title)
+    valid, reason = _validate_owner_title(owner, target_titles)
     if not valid:
         return LeadAssignmentResult(
             lead_id=lead_id,
@@ -150,7 +153,7 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
         )
 
     success_reason = (
-        f"Asignado a {owner_name} (equipo '{target_title}', pais '{country}'). "
+        f"Asignado a {owner_name} (equipo '{team_label}', pais '{country}'). "
         f"Titulo verificado."
     )
     await _notify_assignment(lead, owner, success_reason)
@@ -364,43 +367,65 @@ def _nested_field(value: object, field: str) -> Optional[str]:
     return None
 
 
-def _target_title_for_country(country: Optional[str]) -> str:
-    """Resuelve a que equipo (Title de Salesforce) va el lead segun su pais.
+def _configured_titles(plural_key: str, singular_key: str) -> list:
+    """Lista de Titles de una ruta en team_routing.json. Acepta la clave en
+    plural (lista) y, por compatibilidad con configs viejas, la singular."""
+    titles = team_routing.get(plural_key)
+    if titles:
+        return list(titles)
+    single = team_routing.get(singular_key)
+    return [single] if single else []
+
+
+def _target_titles_for_country(country: Optional[str]) -> list:
+    """Resuelve que Titles de Salesforce trabajan el lead segun su pais. El
+    owner se elige (round-robin) entre TODOS los usuarios activos que tengan
+    cualquiera de esos Titles.
+
+    - Brasil -> brasil_titles.
+    - USA    -> usa_titles (solo (LT) (US)).
+    - Resto de Latam -> default_titles ((LT) + (LT) (US) juntos).
 
     Brasil y USA se detectan por 'contiene' (brasil_keywords / usa_keywords
     en team_routing.json), no por igualdad exacta, porque
     Country_of_Residence__c llega con datos inconsistentes desde la API de
     captura (ej. 'Brazil', 'Sao Paulo, Brazil', 'Brasil' del picklist; o
     'USA', 'United States', 'Estados Unidos de America') — ver
-    team_routing.json. Cualquier otro pais de Latam cae en default_title.
+    team_routing.json.
     """
     normalized_country = _normalized(country)
 
     brasil_keywords = team_routing.get("brasil_keywords", [])
     if any(_normalized(keyword) in normalized_country for keyword in brasil_keywords if keyword):
-        return team_routing["brasil_title"]
+        return _configured_titles("brasil_titles", "brasil_title")
 
     usa_keywords = team_routing.get("usa_keywords", [])
     if usa_keywords and any(_normalized(keyword) in normalized_country for keyword in usa_keywords if keyword):
-        return team_routing.get("usa_title") or team_routing["default_title"]
+        usa_titles = _configured_titles("usa_titles", "usa_title")
+        if usa_titles:
+            return usa_titles
 
-    return team_routing["default_title"]
+    return _configured_titles("default_titles", "default_title")
 
 
-def _validate_owner_title(owner: dict, expected_title: str) -> tuple[bool, str]:
-    """Confirma que el owner encontrado realmente tiene el Title esperado.
+def _validate_owner_title(owner: dict, expected_titles) -> tuple[bool, str]:
+    """Confirma que el owner encontrado realmente tiene alguno de los Titles
+    esperados (acepta un solo Title o una lista).
 
-    Es una defensa en profundidad: find_active_user_by_title ya filtra por
+    Es una defensa en profundidad: find_active_users_by_titles ya filtra por
     Title en el WHERE, asi que esto solo protege contra un cambio de datos
     entre la busqueda y este punto, o un fallback inesperado.
     """
+    if isinstance(expected_titles, str):
+        expected_titles = [expected_titles]
+
     owner_name = owner.get("Name") or ""
     owner_title = owner.get("Title") or _nested_name(owner.get("Profile")) or _nested_name(owner.get("UserRole"))
 
-    if _normalized(owner_title) != _normalized(expected_title):
+    if _normalized(owner_title) not in {_normalized(title) for title in expected_titles}:
         return False, (
             f"El owner encontrado ({owner_name}) tiene Title '{owner_title}', "
-            f"se esperaba '{expected_title}'."
+            f"se esperaba alguno de: {', '.join(expected_titles)}."
         )
 
     return True, ""

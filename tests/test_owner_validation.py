@@ -36,84 +36,93 @@ class ValidateOwnerTitleTests(unittest.TestCase):
         valid, _ = lead_assignment._validate_owner_title(owner, "B2B inbound Latam")
         self.assertTrue(valid)
 
+    def test_owner_matching_any_title_in_list_passes(self):
+        owner = {"Id": "005xx", "Name": "Dayana", "Title": "B2B inbound Latam (US)"}
+        valid, _ = lead_assignment._validate_owner_title(
+            owner, ["B2B inbound Latam", "B2B inbound Latam (US)"]
+        )
+        self.assertTrue(valid)
 
-class TargetTitleForCountryTests(unittest.TestCase):
+    def test_owner_matching_no_title_in_list_fails(self):
+        owner = {"Id": "005xx", "Name": "Ana", "Title": "Account Executive"}
+        valid, reason = lead_assignment._validate_owner_title(
+            owner, ["B2B inbound Latam", "B2B inbound Latam (US)"]
+        )
+        self.assertFalse(valid)
+        self.assertIn("se esperaba alguno de", reason)
+
+
+class TargetTitlesForCountryTests(unittest.TestCase):
+    BR = "B2B inbound Brasil"
+    LT = "B2B inbound Latam"
+    US = "B2B inbound Latam (US)"
+
     ROUTING = {
-        "brasil_title": "B2B inbound Brasil",
+        "brasil_titles": [BR],
         "brasil_keywords": ["brazil", "brasil"],
-        "usa_title": "B2B inbound Latam (US)",
+        "usa_titles": [US],
         "usa_keywords": ["usa", "united states", "estados unidos", "eeuu", "ee.uu"],
-        "default_title": "B2B inbound Latam",
+        "default_titles": [LT, US],
     }
 
+    def _titles(self, country, routing=None):
+        with patch.object(lead_assignment, "team_routing", routing or self.ROUTING):
+            return lead_assignment._target_titles_for_country(country)
+
+    # --- Brasil ---
     def test_english_spelling_routes_to_brasil_team(self):
         """Los datos reales llegan a veces en ingles ('Brazil') pese a que
         el equipo/config estan en espanol — brasil_keywords reconoce ambas
         grafias."""
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("Brazil")
-        self.assertEqual(title, "B2B inbound Brasil")
+        self.assertEqual(self._titles("Brazil"), [self.BR])
 
     def test_city_comma_variant_routes_to_brasil_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("São Paulo, Brazil")
-        self.assertEqual(title, "B2B inbound Brasil")
+        self.assertEqual(self._titles("São Paulo, Brazil"), [self.BR])
 
     def test_spanish_picklist_brasil_routes_to_brasil_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("Brasil")
-        self.assertEqual(title, "B2B inbound Brasil")
+        self.assertEqual(self._titles("Brasil"), [self.BR])
 
-    def test_other_latam_country_routes_to_default_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            self.assertEqual(lead_assignment._target_title_for_country("Colombia"), "B2B inbound Latam")
-            self.assertEqual(lead_assignment._target_title_for_country("Chile"), "B2B inbound Latam")
+    # --- USA: SOLO el titulo (US) ---
+    def test_usa_routes_only_to_us_title(self):
+        for country in ("USA", "United States", "Estados Unidos de América", "Miami, USA"):
+            self.assertEqual(self._titles(country), [self.US], country)
 
-    def test_missing_country_routes_to_default_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country(None)
-        self.assertEqual(title, "B2B inbound Latam")
+    def test_usa_never_includes_plain_lt_title(self):
+        self.assertNotIn(self.LT, self._titles("USA"))
 
-    def test_usa_abbreviation_routes_to_usa_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("USA")
-        self.assertEqual(title, "B2B inbound Latam (US)")
+    # --- Resto de Latam: pool (LT) + (LT) (US) ---
+    def test_other_latam_country_pool_includes_lt_and_us_titles(self):
+        for country in ("Colombia", "Chile", "Venezuela", "Nicaragua", "México"):
+            self.assertEqual(self._titles(country), [self.LT, self.US], country)
 
-    def test_united_states_full_name_routes_to_usa_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("United States")
-        self.assertEqual(title, "B2B inbound Latam (US)")
+    def test_missing_country_routes_to_default_pool(self):
+        self.assertEqual(self._titles(None), [self.LT, self.US])
 
-    def test_spanish_estados_unidos_routes_to_usa_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("Estados Unidos de América")
-        self.assertEqual(title, "B2B inbound Latam (US)")
-
-    def test_city_comma_usa_variant_routes_to_usa_team(self):
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("Miami, USA")
-        self.assertEqual(title, "B2B inbound Latam (US)")
-
-    def test_no_usa_keywords_configured_falls_back_to_default(self):
-        """Compatibilidad hacia atras: si team_routing.json no tiene
-        usa_keywords (configuracion vieja, sin el equipo de USA), nunca debe
-        romper — USA simplemente cae en default_title como cualquier otro
-        pais de Latam."""
-        routing_without_usa = {
-            "brasil_title": "B2B inbound Brasil",
-            "brasil_keywords": ["brazil", "brasil"],
-            "default_title": "B2B inbound Latam",
+    # --- Compatibilidad / orden ---
+    def test_legacy_singular_keys_still_work(self):
+        """Configs viejas con brasil_title / usa_title / default_title
+        (singulares) siguen funcionando."""
+        legacy = {
+            "brasil_title": self.BR,
+            "brasil_keywords": ["brasil"],
+            "usa_title": self.US,
+            "usa_keywords": ["usa"],
+            "default_title": self.LT,
         }
-        with patch.object(lead_assignment, "team_routing", routing_without_usa):
-            title = lead_assignment._target_title_for_country("USA")
-        self.assertEqual(title, "B2B inbound Latam")
+        self.assertEqual(self._titles("Brasil", legacy), [self.BR])
+        self.assertEqual(self._titles("USA", legacy), [self.US])
+        self.assertEqual(self._titles("Colombia", legacy), [self.LT])
+
+    def test_no_usa_keywords_configured_falls_back_to_default_pool(self):
+        routing_without_usa = {
+            "brasil_titles": [self.BR],
+            "brasil_keywords": ["brazil", "brasil"],
+            "default_titles": [self.LT, self.US],
+        }
+        self.assertEqual(self._titles("USA", routing_without_usa), [self.LT, self.US])
 
     def test_brasil_is_checked_before_usa_when_both_could_match(self):
-        """No deberia haber solapamiento real, pero confirma el orden:
-        Brasil tiene prioridad sobre USA en la resolucion."""
-        with patch.object(lead_assignment, "team_routing", self.ROUTING):
-            title = lead_assignment._target_title_for_country("Brasil")
-        self.assertEqual(title, "B2B inbound Brasil")
+        self.assertEqual(self._titles("Brasil"), [self.BR])
 
 
 class LeadMatchesTargetSegmentTests(unittest.TestCase):
