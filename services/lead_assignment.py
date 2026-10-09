@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from config import lead_segment, settings, team_routing
 from models.schemas import LeadAssignmentResult
+from services.attendance import filter_present as _filter_present
 from services.round_robin import pick_next as _pick_next_owner
 from services.salesforce_client import SalesforceApiError, SalesforceAuthError, SalesforceClient
 from services.slack_service import SlackService
@@ -120,7 +121,12 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
     # rotacion igual — se acepto este trade-off por simplicidad, ya que esos
     # fallos deberian ser raros/transitorios y el lead se reintenta solo en
     # el siguiente ciclo (con el siguiente owner en turno).
-    owner = _pick_next_owner(team_label, candidates)
+    #
+    # Antes del reparto, en pools de 2+ personas se descartan quienes no
+    # estan conectados hoy segun la asistencia (LoginHistory, ver
+    # services/attendance.py). Con 1 sola persona no se filtra nunca.
+    attendance = await _filter_present(candidates, salesforce)
+    owner = _pick_next_owner(team_label, attendance.candidates)
 
     valid, reason = _validate_owner_title(owner, target_titles)
     if not valid:
@@ -156,6 +162,8 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
         f"Asignado a {owner_name} (equipo '{team_label}', pais '{country}'). "
         f"Titulo verificado."
     )
+    if attendance.note:
+        success_reason += f" {attendance.note}"
     await _notify_assignment(lead, owner, success_reason)
 
     return LeadAssignmentResult(

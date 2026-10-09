@@ -119,6 +119,32 @@ class SalesforceClient:
             "ORDER BY Id ASC"
         )
 
+    async def find_successful_logins(
+        self,
+        user_ids: Iterable[str],
+        since_utc: str,
+        until_utc: str,
+    ) -> list[dict[str, Any]]:
+        """Logins exitosos (LoginHistory) de `user_ids` entre `since_utc` y
+        `until_utc` (formato SOQL UTC, ej. 2026-10-09T05:00:00Z). Se usa para
+        la asistencia diaria - ver services/attendance.py.
+
+        Ojo: Salesforce NO permite filtrar LoginHistory.Status dentro del
+        WHERE ("field 'Status' can not be filtered in a query call"), asi que
+        se trae y se filtra aqui en Python."""
+        ids = [user_id for user_id in user_ids if user_id]
+        if not ids:
+            return []
+
+        records = await self.query_all(
+            "SELECT UserId, LoginTime, Application, LoginType, Status "
+            "FROM LoginHistory "
+            f"WHERE UserId IN ({_csv_quoted(ids)}) "
+            f"AND LoginTime >= {since_utc} AND LoginTime <= {until_utc} "
+            "ORDER BY LoginTime ASC"
+        )
+        return [record for record in records if record.get("Status") == "Success"]
+
     async def get_record_type_id(self, developer_name: str) -> Optional[str]:
         if developer_name in self._record_type_ids:
             return self._record_type_ids[developer_name]

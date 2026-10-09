@@ -6,3 +6,4 @@ pydantic-settings==2.3.0
 python-dotenv==1.0.1
 slack-sdk==3.29.0
 tzdata==2024.1
+holidays==0.58

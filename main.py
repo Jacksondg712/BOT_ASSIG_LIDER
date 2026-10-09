@@ -8,8 +8,9 @@ from fastapi.responses import PlainTextResponse
 
 from pydantic import BaseModel
 
-from config import settings
-from services.lead_assignment import _notify_assignment, handle_lead_ids
+from config import attendance_config, settings
+from services.attendance_report import AttendanceReportLoop
+from services.lead_assignment import _notify_assignment, handle_lead_ids, salesforce, slack
 from services.poller import PollLoop, load_checkpoint, run_poll_cycle
 from utils.payload_parser import build_outbound_message_ack, parse_notification
 
@@ -28,6 +29,7 @@ if settings.slack_test_mode:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 _poll_loop = PollLoop()
+_attendance_report_loop = AttendanceReportLoop(salesforce, slack)
 
 
 @asynccontextmanager
@@ -36,10 +38,18 @@ async def lifespan(app: FastAPI):
     if settings.poll_enabled:
         poll_task = asyncio.create_task(_poll_loop.run())
 
+    # Mensaje de asistencia (lunes a viernes habiles, ver attendance.json).
+    report_task = None
+    if attendance_config.get("enabled") and attendance_config.get("report", {}).get("enabled"):
+        report_task = asyncio.create_task(_attendance_report_loop.run())
+
     yield
     if poll_task:
         _poll_loop.stop()
         poll_task.cancel()
+    if report_task:
+        _attendance_report_loop.stop()
+        report_task.cancel()
 
 
 app = FastAPI(

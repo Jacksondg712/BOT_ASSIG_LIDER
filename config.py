@@ -15,6 +15,12 @@ _segment_path = Path(__file__).with_name("lead_segment.json")
 lead_segment: dict = _json.loads(_segment_path.read_text(encoding="utf-8"))
 
 
+# Asistencia diaria (quien esta conectado hoy) para repartir solo entre los
+# presentes en pools de 2+ personas - editar attendance.json sin tocar codigo.
+_attendance_path = Path(__file__).with_name("attendance.json")
+attendance_config: dict = _json.loads(_attendance_path.read_text(encoding="utf-8"))
+
+
 class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     #  SECRETOS — deben estar en variables de entorno (.env)              #
@@ -64,6 +70,14 @@ class Settings(BaseSettings):
     @property
     def notification_channel_id(self) -> str:
         return self.lead_assignment_channel_id or self.slack_test_channel_id
+
+    # Canal del mensaje de asistencia diaria. Vacio = el mismo canal de
+    # asignaciones (notification_channel_id).
+    attendance_channel_id: str = ""
+
+    @property
+    def attendance_report_channel_id(self) -> str:
+        return self.attendance_channel_id or self.notification_channel_id
 
 
 settings = Settings()

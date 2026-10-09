@@ -1,0 +1,27 @@
+{
+  "_comment": "Asistencia diaria por LoginHistory de Salesforce. Solo aplica a pools con 2+ personas activas (si el pool tiene 1 sola persona se le asigna siempre, este conectada o no, ej. USA y Brasil). Todo ocurre solo en DIAS HABILES de Colombia (lunes a viernes, sin festivos). Editar aqui sin tocar codigo.",
+
+  "enabled": true,
+
+  "timezone": "America/Bogota",
+
+  "_comment_snapshot_times": "Horas (en 'timezone') a las que se 'toma asistencia'. En cada toma, esta presente quien tenga un login valido entre las 00:00 del dia y esa hora (+ grace_minutes). Un lead que llega entre dos tomas usa la ultima toma ya cumplida; antes de la primera toma del dia no se filtra a nadie.",
+  "snapshot_times": ["07:00", "08:00"],
+
+  "_comment_grace": "Minutos extra despues de cada toma en los que un login todavia cuenta, para quien tenga alguna dificultad para conectarse. Con 30: quien entre hasta las 8:30 todavia cuenta para la toma de las 8:00.",
+  "grace_minutes": 30,
+
+  "_comment_apps": "Que logins cuentan como 'conectado trabajando'. 'Browser' = login web (incluye SAML SSO). Se ignoran Slack y app movil ('Salesforce for Android'), que registran logins automaticos a cualquier hora (ej. 00:48 am) y no significan que la persona este trabajando.",
+  "counted_applications": ["Browser"],
+
+  "_comment_business_days": "true = el filtro de asistencia y el mensaje solo corren lunes a viernes sin festivos de Colombia. En fines de semana y festivos no se filtra ni se envia nada.",
+  "business_days_only": true,
+
+  "report": {
+    "_comment": "Mensaje de Slack con la asistencia. Se envia UNA vez por dia habil cuando se cierra el margen de cada toma listada en 'snapshots' (toma + grace_minutes). Con ['08:00'] y grace 30 sale a las 8:30; agrega '07:00' para recibir tambien uno a las 7:30.",
+    "enabled": true,
+    "snapshots": ["08:00"],
+    "_comment_catchup": "Si el bot estaba apagado a esa hora y arranca despues, todavia envia el mensaje pendiente si han pasado como maximo estos minutos; pasado ese tiempo lo omite (un reporte de las 8:30 a las 5pm no sirve).",
+    "catchup_minutes": 120
+  }
+}

@@ -2,6 +2,7 @@ import asyncio
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -12,6 +13,13 @@ import services.lead_assignment as lead_assignment
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+async def _no_attendance_filter(candidates, salesforce, now=None):
+    """Los tests de reparto no deben consultar LoginHistory real."""
+    from services.attendance import AttendanceResult
+
+    return AttendanceResult(candidates=candidates)
 
 
 def _lead(**overrides):
@@ -36,6 +44,13 @@ def _owner(user_id: str, name: str, title: str) -> dict:
     return {"Id": user_id, "Name": name, "Email": f"{name.lower()}@openenglish.com", "Title": title}
 
 
+SEGMENT = {
+    "record_type_developer_name": "B2B_Company",
+    "unassigned_owners": [{"type": "User", "identifier": "integrationapi@openenglish.com"}],
+    "excluded_statuses": [],
+}
+
+
 class ProcessLeadRoundRobinTests(unittest.TestCase):
     """Confirma que _process_lead realmente delega en _pick_next_owner (el
     reparto equitativo) para decidir el owner, en vez de quedarse siempre
@@ -43,11 +58,6 @@ class ProcessLeadRoundRobinTests(unittest.TestCase):
     en si misma (orden, wraparound, persistencia) ya esta cubierta en
     test_round_robin.py — aqui solo se verifica el cableado."""
 
-    SEGMENT = {
-        "record_type_developer_name": "B2B_Company",
-        "unassigned_owners": [{"type": "User", "identifier": "integrationapi@openenglish.com"}],
-        "excluded_statuses": [],
-    }
     ROUTING = {
         "brasil_keywords": ["brazil", "brasil"],
         "brasil_titles": ["SDR Inbound BR"],
@@ -61,27 +71,35 @@ class ProcessLeadRoundRobinTests(unittest.TestCase):
         ]
         chosen_in_order = [candidates[0], candidates[1]]
 
-        with patch.object(lead_assignment, "lead_segment", self.SEGMENT), \
-             patch.object(lead_assignment, "team_routing", self.ROUTING), \
-             patch.object(lead_assignment.settings, "slack_notifications_enabled", False), \
-             patch.object(
-                 lead_assignment.salesforce,
-                 "get_lead",
-                 new=AsyncMock(side_effect=[_lead(Id="00Q1"), _lead(Id="00Q2")]),
-             ), \
-             patch.object(
-                 lead_assignment.salesforce, "find_active_users_by_titles", new=AsyncMock(return_value=candidates)
-             ), \
-             patch.object(
-                 lead_assignment, "_pick_next_owner", side_effect=chosen_in_order
-             ) as mock_pick, \
-             patch.object(
-                 lead_assignment.salesforce, "update_lead_owner", new=AsyncMock(return_value=True)
-             ) as mock_update:
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(lead_assignment, "_filter_present", new=_no_attendance_filter))
+            stack.enter_context(patch.object(lead_assignment, "lead_segment", SEGMENT))
+            stack.enter_context(patch.object(lead_assignment, "team_routing", self.ROUTING))
+            stack.enter_context(patch.object(lead_assignment.settings, "slack_notifications_enabled", False))
+            stack.enter_context(
+                patch.object(
+                    lead_assignment.salesforce,
+                    "get_lead",
+                    new=AsyncMock(side_effect=[_lead(Id="00Q1"), _lead(Id="00Q2")]),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    lead_assignment.salesforce,
+                    "find_active_users_by_titles",
+                    new=AsyncMock(return_value=candidates),
+                )
+            )
+            mock_pick = stack.enter_context(
+                patch.object(lead_assignment, "_pick_next_owner", side_effect=chosen_in_order)
+            )
+            mock_update = stack.enter_context(
+                patch.object(lead_assignment.salesforce, "update_lead_owner", new=AsyncMock(return_value=True))
+            )
             _run(lead_assignment._process_lead("00Q1"))
             _run(lead_assignment._process_lead("00Q2"))
 
-        # Se llamo pasando el Title resuelto y la lista completa de candidatos.
+        # Se llamo pasando el pool resuelto y la lista completa de candidatos.
         for call in mock_pick.call_args_list:
             # clave de rotacion = el pool completo (LT + LT (US)), no un Title suelto
             self.assertEqual(call.args[0], "SDR Inbound LT + SDR Inbound LT (US)")
@@ -91,13 +109,19 @@ class ProcessLeadRoundRobinTests(unittest.TestCase):
         self.assertEqual(owner_ids_used, ["005AAA", "005BBB"])
 
     def test_no_candidates_errors_without_calling_pick_next_owner(self):
-        with patch.object(lead_assignment, "lead_segment", self.SEGMENT), \
-             patch.object(lead_assignment, "team_routing", self.ROUTING), \
-             patch.object(lead_assignment.salesforce, "get_lead", new=AsyncMock(return_value=_lead())), \
-             patch.object(
-                 lead_assignment.salesforce, "find_active_users_by_titles", new=AsyncMock(return_value=[])
-             ), \
-             patch.object(lead_assignment, "_pick_next_owner") as mock_pick:
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(lead_assignment, "_filter_present", new=_no_attendance_filter))
+            stack.enter_context(patch.object(lead_assignment, "lead_segment", SEGMENT))
+            stack.enter_context(patch.object(lead_assignment, "team_routing", self.ROUTING))
+            stack.enter_context(
+                patch.object(lead_assignment.salesforce, "get_lead", new=AsyncMock(return_value=_lead()))
+            )
+            stack.enter_context(
+                patch.object(
+                    lead_assignment.salesforce, "find_active_users_by_titles", new=AsyncMock(return_value=[])
+                )
+            )
+            mock_pick = stack.enter_context(patch.object(lead_assignment, "_pick_next_owner"))
             result = _run(lead_assignment._process_lead("00Q1"))
 
         mock_pick.assert_not_called()
@@ -109,7 +133,6 @@ class LatamAndUsaPoolScenarioTests(unittest.TestCase):
     - Leads de Latam se reparten equitativo entre las DOS.
     - Leads de USA van SOLO a Dayana."""
 
-    SEGMENT = ProcessLeadRoundRobinTests.SEGMENT
     ROUTING = {
         "brasil_titles": ["SDR BR"],
         "brasil_keywords": ["brasil"],
@@ -136,7 +159,25 @@ class LatamAndUsaPoolScenarioTests(unittest.TestCase):
             def pick_with_tmp_state(title, candidates):
                 return round_robin.pick_next(title, candidates, state)
 
-            with patch.object(lead_assignment, "lead_segment", self.SEGMENT),                  patch.object(lead_assignment, "team_routing", self.ROUTING),                  patch.object(lead_assignment.settings, "slack_notifications_enabled", False),                  patch.object(lead_assignment.salesforce, "get_lead", new=AsyncMock(side_effect=leads)),                  patch.object(lead_assignment.salesforce, "find_active_users_by_titles", new=fake_find),                  patch.object(lead_assignment, "_pick_next_owner", side_effect=pick_with_tmp_state),                  patch.object(lead_assignment.salesforce, "update_lead_owner", new=AsyncMock(return_value=True)) as upd:
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(lead_assignment, "_filter_present", new=_no_attendance_filter))
+                stack.enter_context(patch.object(lead_assignment, "lead_segment", SEGMENT))
+                stack.enter_context(patch.object(lead_assignment, "team_routing", self.ROUTING))
+                stack.enter_context(patch.object(lead_assignment.settings, "slack_notifications_enabled", False))
+                stack.enter_context(
+                    patch.object(lead_assignment.salesforce, "get_lead", new=AsyncMock(side_effect=leads))
+                )
+                stack.enter_context(
+                    patch.object(lead_assignment.salesforce, "find_active_users_by_titles", new=fake_find)
+                )
+                stack.enter_context(
+                    patch.object(lead_assignment, "_pick_next_owner", side_effect=pick_with_tmp_state)
+                )
+                upd = stack.enter_context(
+                    patch.object(
+                        lead_assignment.salesforce, "update_lead_owner", new=AsyncMock(return_value=True)
+                    )
+                )
                 for lead in leads:
                     _run(lead_assignment._process_lead(lead["Id"]))
         return [call.args[1] for call in upd.await_args_list]

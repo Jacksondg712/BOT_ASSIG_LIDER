@@ -158,6 +158,57 @@ sucesivamente, volviendo al principio al llegar al final.
   `services/round_robin.py` — la llamada desde `services/lead_assignment.py`
   no cambia.
 
+## Asistencia diaria (solo reparte entre los conectados)
+
+[services/attendance.py](services/attendance.py) +
+[services/attendance_report.py](services/attendance_report.py) +
+[attendance.json](attendance.json). Todo ocurre solo en **dias habiles de
+Colombia**: lunes a viernes, sin festivos (los calcula la libreria
+`holidays`, incluye los trasladados a lunes por la Ley Emiliani). En fines de
+semana y festivos no se filtra ni se envia nada.
+
+Antes del round-robin, en pools con **2 o mas personas** se descarta a quien
+no este conectado hoy, segun el `LoginHistory` de Salesforce:
+
+- **Tomas de asistencia**: `07:00` y `08:00` hora Bogota (`snapshot_times`).
+  En cada toma esta presente quien tenga un login valido entre las 00:00 del
+  dia y esa hora **mas el margen** (`grace_minutes`, hoy **30**, para quien
+  tenga alguna dificultad para conectarse: quien entre hasta las 8:30 cuenta
+  para la toma de las 8:00). Un lead que llega entre dos tomas usa la ultima
+  cumplida. No hay scheduler ni estado para el filtro: `LoginHistory` es
+  historico, asi que el resultado se calcula (y cachea) cuando llega el lead.
+- **Que cuenta como "conectado"**: solo logins de navegador
+  (`counted_applications: ["Browser"]`). Slack y la app movil se ignoran porque
+  registran logins automaticos a cualquier hora (ej. 00:48 am).
+- **Pool de 1 sola persona** (USA, Brasil hoy): se le asigna **siempre**, este
+  conectada o no.
+- **Nadie conectado** en un pool de 2+: no se filtra, se reparte entre todos.
+- **Antes de la primera toma** del dia (ej. 3 am): no se filtra.
+- **Falla abierta**: si la consulta a Salesforce falla, no se filtra.
+- El motivo queda en el detalle del post de cada asignacion
+  (`Asistencia 08:00: 1 de 2 conectados (ausente: ...)`) y en los logs
+  `[ASISTENCIA ...]`. `enabled: false` apaga todo.
+
+### Mensaje de asistencia en Slack
+
+Una vez por dia habil, cuando se cierra el margen de la toma (08:00 + 30 min =
+**8:30**), el bot publica la asistencia por equipo (Brasil, USA, Latam): quien
+esta conectado y desde que hora, quien no, y que regla de reparto aplica.
+
+- Toma(s) que generan mensaje: `report.snapshots` (hoy `["08:00"]`; agrega
+  `"07:00"` para recibir tambien uno a las 7:30).
+- Va al canal `ATTENDANCE_CHANNEL_ID` del `.env`; si esta vacio, al mismo
+  canal de asignaciones (`LEAD_ASSIGNMENT_CHANNEL_ID` / `SLACK_TEST_CHANNEL_ID`).
+- **No se duplica** si el bot se reinicia (`attendance_report_state.json`, no
+  se versiona). Si el bot estaba apagado a las 8:30 y arranca despues, lo envia
+  igual siempre que no hayan pasado mas de `report.catchup_minutes` (120); pasado
+  eso lo omite (un reporte de las 8:30 a las 5 pm no sirve).
+- Si el envio falla, se reintenta en el siguiente ciclo (cada minuto).
+
+Requiere que el usuario de integracion pueda leer `LoginHistory` (ya
+verificado). Ojo: Salesforce no deja filtrar `LoginHistory.Status` en el
+`WHERE`, por eso se filtra en Python.
+
 ## Notificaciones de Slack (DM al owner + registro en canal)
 
 App de Slack propia (no comparte token con `BOT_SLACK_SALESFORCE`). Bot
