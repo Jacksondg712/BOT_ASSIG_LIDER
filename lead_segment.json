@@ -3,12 +3,17 @@
 
   "record_type_developer_name": "B2B_Company",
 
-  "_comment_unassigned_owners": "El 'unassigned' NO es un solo owner en este org: la mayoria de paises dejan el lead en manos del usuario de integracion que lo crea via API, pero Brasil tiene su propia asignacion automatica en Salesforce que lo manda directo a una Queue. Se listan todos los owners que cuentan como 'sin asignar de verdad' (descubierto el 2026-09-15 al ver que los leads de prueba de Brasil no entraban).",
+  "_comment_unassigned_owners": "El 'unassigned' NO es un solo owner en este org: la mayoria de paises dejan el lead en manos del usuario de integracion que lo crea via API, pero Brasil tiene su propia asignacion automatica en Salesforce que lo manda directo a una Queue. Se listan todos los owners que cuentan como 'sin asignar de verdad' (descubierto el 2026-09-15 al ver que los leads de prueba de Brasil no entraban). SI SALESFORCE CAMBIA/AGREGA OTRO USUARIO O COLA DE INTEGRACION, hay que agregarlo aqui (y al filtro OWNER del reporte): un lead cuyo owner no esta en esta lista es invisible para el bot.",
   "unassigned_owners": [
     {
       "type": "User",
       "identifier": "integrationapi@openenglish.com",
       "_comment": "Default para la mayoria de paises (Latam, etc). identifier = Username del User."
+    },
+    {
+      "type": "User",
+      "identifier": "store.integration@openenglish.com",
+      "_comment": "Agregado 2026-10-14: Salesforce empezo a crear/dejar leads con este usuario NUEVO (id 005WP00000LD1VFYA1, distinto de Salesforce Integration API, que sigue existiendo). Es el mismo cambio que ya se hizo en el filtro OWNER/CREATED del reporte original. Sin esta entrada el bot no los veia."
     },
     {
       "type": "Queue",

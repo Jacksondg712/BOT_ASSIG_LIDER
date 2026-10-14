@@ -96,6 +96,23 @@ solo se usa para aislar leads de prueba con un filtro extra
 (`utmSource__c = 'test'`), reflejado en `lead_segment.json` como
 `utm_source` — ver "MODO PRUEBA ACTIVO" mas arriba.
 
+
+### Cuando Salesforce cambia el usuario de integracion (2026-10-14)
+
+El 8 oct apareció un usuario **nuevo** `Store Integration`
+(`store.integration@openenglish.com`, id `005WP00000LD1VFYA1`), distinto de
+`Salesforce Integration API` (que sigue existiendo). Los leads que quedaban con
+ese Owner no coincidian con `unassigned_owners` y eran **invisibles** para el
+bot — sin error, sin log. Ya esta agregado en `lead_segment.json`.
+
+**Regla general:** cada vez que Salesforce agregue/cambie un usuario o cola de
+integracion, hay que agregarlo en dos lados: el filtro `OWNER` del reporte
+original y `unassigned_owners` en `lead_segment.json`.
+`tests/test_lead_segment_config.py` valida la lista real. Ojo: el poller solo
+mira leads con `CreatedDate` posterior al checkpoint, asi que los leads que se
+quedaron con el Owner desconocido *antes* de agregarlo no se recogen solos si el
+checkpoint ya los paso (ver `/salesforce/lead-created` para procesarlos a mano).
+
 ## Reparto por pais (equipo Brasil vs equipo Latam)
 
 Desde el 2026-09-15, el bot enruta el lead segun `Country_of_Residence__c`,
