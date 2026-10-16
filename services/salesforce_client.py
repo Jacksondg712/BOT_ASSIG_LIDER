@@ -208,8 +208,9 @@ class SalesforceClient:
         owner_ids: Iterable[str],
         excluded_statuses: Iterable[str],
         since_created_date: Optional[str] = None,
-        limit: int = 20,
+        limit: Optional[int] = 20,
         utm_source: Optional[str] = None,
+        until_created_date: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Busca Leads que hoy cumplen el segmento objetivo (para polling).
 
@@ -223,6 +224,9 @@ class SalesforceClient:
         `utm_source`: si se pasa (modo prueba), restringe a
         utmSource__c = <valor> — usado para aislar los leads del reporte de
         pruebas y no tocar trafico real mientras se valida el bot.
+
+        `until_created_date` (inclusive) y `limit=None` (sin LIMIT) los usa el
+        barrido hacia atras del poller (ver poll_lookback_hours).
         """
         owner_ids_list = [owner_id for owner_id in owner_ids if owner_id]
         if not owner_ids_list:
@@ -238,15 +242,18 @@ class SalesforceClient:
             clauses.append(f"Status NOT IN ({_csv_quoted(excluded)})")
         if since_created_date:
             clauses.append(f"CreatedDate > {since_created_date}")
+        if until_created_date:
+            clauses.append(f"CreatedDate <= {until_created_date}")
         if utm_source:
             clauses.append(f"utmSource__c = {_soql_quote(utm_source)}")
 
         soql = (
             "SELECT Id, CreatedDate FROM Lead "
             f"WHERE {' AND '.join(clauses)} "
-            "ORDER BY CreatedDate ASC "
-            f"LIMIT {int(limit)}"
+            "ORDER BY CreatedDate ASC"
         )
+        if limit is not None:
+            soql += f" LIMIT {int(limit)}"
         logger.info("SF find_unassigned_lead_ids: %s", soql)
         return await self.query_all(soql)
 

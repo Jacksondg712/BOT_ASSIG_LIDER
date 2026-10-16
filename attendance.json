@@ -6,7 +6,7 @@
   "timezone": "America/Bogota",
 
   "_comment_snapshot_times": "Horas (en 'timezone') a las que se 'toma asistencia'. En cada toma, esta presente quien tenga un login valido entre las 00:00 del dia y esa hora (+ grace_minutes). Un lead que llega entre dos tomas usa la ultima toma ya cumplida; antes de la primera toma del dia no se filtra a nadie.",
-  "snapshot_times": ["07:00", "08:00"],
+  "snapshot_times": ["07:00", "08:00", "13:00"],
 
   "_comment_grace": "Minutos extra despues de cada toma en los que un login todavia cuenta, para quien tenga alguna dificultad para conectarse. Con 30: quien entre hasta las 8:30 todavia cuenta para la toma de las 8:00.",
   "grace_minutes": 30,
@@ -18,9 +18,9 @@
   "business_days_only": true,
 
   "report": {
-    "_comment": "Mensaje de Slack con la asistencia. Se envia UNA vez por dia habil cuando se cierra el margen de cada toma listada en 'snapshots' (toma + grace_minutes). Con ['08:00'] y grace 30 sale a las 8:30; agrega '07:00' para recibir tambien uno a las 7:30.",
+    "_comment": "Mensaje de Slack con la asistencia. Se envia UNA vez por dia habil cuando se cierra el margen de cada toma listada en 'snapshots' (toma + grace_minutes). Con ['08:00', '13:00'] y grace 30 salen a las 8:30 y a la 1:30 pm; agrega '07:00' para recibir tambien uno a las 7:30. Cada toma listada aqui debe estar tambien en snapshot_times para que el reparto use la misma lista de conectados que el mensaje.",
     "enabled": true,
-    "snapshots": ["08:00"],
+    "snapshots": ["08:00", "13:00"],
     "_comment_catchup": "Si el bot estaba apagado a esa hora y arranca despues, todavia envia el mensaje pendiente si han pasado como maximo estos minutos; pasado ese tiempo lo omite (un reporte de las 8:30 a las 5pm no sirve).",
     "catchup_minutes": 120
   }

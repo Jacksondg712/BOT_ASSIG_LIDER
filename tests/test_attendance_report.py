@@ -278,6 +278,65 @@ class FormatTests(ReportTestCase):
         body = "\n".join(b["text"]["text"] for b in blocks if b["type"] == "section")
         self.assertIn("Nadie conectado", body)
 
+    def test_header_clock_matches_the_snapshot_hour(self):
+        text, _ = format_attendance_report(self._report([]))
+        self.assertTrue(text.startswith("🕗 Asistencia 08:00"))
+        afternoon = _run(report.build_report(FakeSalesforce([]), _at(FRIDAY, 13, 30), "13:00"))
+        text, _ = format_attendance_report(afternoon)
+        self.assertTrue(text.startswith("🕐 Asistencia 13:00"))
+
+
+class AfternoonSnapshotTests(ReportTestCase):
+    """Toma de la 1 pm (13:00 + 30 min de margen), ademas de la de las 8 am."""
+
+    CFG = dict(
+        CONFIG,
+        snapshot_times=["07:00", "08:00", "13:00"],
+        report=dict(CONFIG["report"], snapshots=["08:00", "13:00"]),
+    )
+
+    def setUp(self):
+        super().setUp()
+        for module in (attendance, report):
+            patcher = patch.object(module, "attendance_config", self.CFG)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_afternoon_report_due_at_1330_and_not_before(self):
+        self.assertEqual(report.due_labels(_at(FRIDAY, 13, 29), {"2026-10-09|08:00": "x"}), [])
+        self.assertEqual(report.due_labels(_at(FRIDAY, 13, 30), {"2026-10-09|08:00": "x"}), ["13:00"])
+
+    def test_morning_and_afternoon_reports_are_sent_once_each(self):
+        sf = FakeSalesforce([_login("005PAOLA", 7, 50)])
+        morning = _run(report.run_report_if_due(sf, self.slack, _at(FRIDAY, 8, 30)))
+        midday = _run(report.run_report_if_due(sf, self.slack, _at(FRIDAY, 12, 0)))
+        afternoon = _run(report.run_report_if_due(sf, self.slack, _at(FRIDAY, 13, 30)))
+        again = _run(report.run_report_if_due(sf, self.slack, _at(FRIDAY, 13, 31)))
+        self.assertEqual((morning, midday, afternoon, again), (["08:00"], [], ["13:00"], []))
+        self.assertEqual(self.slack.post_message.await_count, 2)
+
+    def test_afternoon_report_counts_people_who_arrived_late(self):
+        sf = FakeSalesforce([_login("005PAOLA", 7, 50), _login("005DAYANA", 10, 15)])
+        _run(report.run_report_if_due(sf, self.slack, _at(FRIDAY, 8, 30)))
+        _run(report.run_report_if_due(sf, self.slack, _at(FRIDAY, 13, 30)))
+        morning_text = self.slack.post_message.await_args_list[0].args[1]
+        afternoon_text = self.slack.post_message.await_args_list[1].args[1]
+        self.assertIn("Latam 1/2", morning_text)
+        self.assertIn("Latam 2/2", afternoon_text)
+
+    def test_login_inside_the_afternoon_margin_counts(self):
+        sf = FakeSalesforce([_login("005DAYANA", 13, 25)])
+        presence = _run(attendance.get_presence(["005DAYANA"], sf, _at(FRIDAY, 13, 30), "13:00"))
+        self.assertTrue(presence.is_present("005DAYANA"))
+
+    def test_assignment_after_1pm_includes_late_arrivals(self):
+        sf = FakeSalesforce([_login("005PAOLA", 7, 50), _login("005DAYANA", 10, 15)])
+        morning = _run(attendance.filter_present([PAOLA, DAYANA], sf, _at(FRIDAY, 11)))
+        afternoon = _run(attendance.filter_present([PAOLA, DAYANA], sf, _at(FRIDAY, 14)))
+        self.assertEqual(morning.candidates, [PAOLA])
+        self.assertEqual(afternoon.candidates, [PAOLA, DAYANA])
+        self.assertIn("Asistencia 13:00", afternoon.note)
+
 
 if __name__ == "__main__":
     unittest.main()

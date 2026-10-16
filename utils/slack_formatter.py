@@ -106,6 +106,12 @@ def _hhmm(moment) -> str:
     return moment.strftime("%H:%M")
 
 
+def _clock_emoji(label: str) -> str:
+    """Reloj de la hora en punto de la toma ("08:00" -> 🕗, "13:00" -> 🕐)."""
+    hour = int(label.split(":")[0])
+    return chr(0x1F550 + (hour - 1) % 12)
+
+
 def format_attendance_report(report: dict) -> tuple:
     """Mensaje de asistencia: (texto plano de respaldo, blocks).
 
@@ -115,7 +121,7 @@ def format_attendance_report(report: dict) -> tuple:
     """
     day = report["day"]
     header = (
-        f"🕗 Asistencia {report['snapshot']} — {_WEEKDAYS_ES[day.weekday()]} "
+        f"{_clock_emoji(report['snapshot'])} Asistencia {report['snapshot']} — {_WEEKDAYS_ES[day.weekday()]} "
         f"{day.strftime('%d/%m/%Y')}"
     )
     intro = (

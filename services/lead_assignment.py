@@ -22,6 +22,12 @@ slack = SlackService()
 _PROCESSED_LEAD_IDS: set[str] = set()
 
 
+def was_processed(lead_id: str) -> bool:
+    """True si el lead ya se proceso sin error en este proceso — en ese caso
+    handle_lead_ids lo omite y NO devuelve resultado para el."""
+    return lead_id in _PROCESSED_LEAD_IDS
+
+
 async def handle_lead_ids(lead_ids: List[str]) -> List[LeadAssignmentResult]:
     results: List[LeadAssignmentResult] = []
     for lead_id in lead_ids:

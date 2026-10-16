@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     poll_enabled: bool = True
     poll_interval_seconds: int = 60
     poll_batch_size: int = 20
+    # Ciclos seguidos que un Lead con error puede frenar el checkpoint antes
+    # de pasarlo a la lista de reintentos (retry_lead_ids en poll_state.json),
+    # para que un error persistente no bloquee a los Leads que vienen detras.
+    poll_max_lead_retries: int = 5
+    # Barrido hacia atras: en cada ciclo tambien se buscan Leads del segmento
+    # creados en las ultimas N horas que el checkpoint ya dejo atras y siguen
+    # sin asignar (ej. owner de integracion agregado tarde, commit tardio en
+    # Salesforce, bot apagado/estado reiniciado). 0 = desactivado.
+    poll_lookback_hours: int = 72
 
     # --- Slack: notificacion de asignaciones (DM al owner + registro en ---
     # --- un canal). App propia de este bot (Bot Token Scopes: chat:write, ---

@@ -108,10 +108,10 @@ bot — sin error, sin log. Ya esta agregado en `lead_segment.json`.
 **Regla general:** cada vez que Salesforce agregue/cambie un usuario o cola de
 integracion, hay que agregarlo en dos lados: el filtro `OWNER` del reporte
 original y `unassigned_owners` en `lead_segment.json`.
-`tests/test_lead_segment_config.py` valida la lista real. Ojo: el poller solo
-mira leads con `CreatedDate` posterior al checkpoint, asi que los leads que se
-quedaron con el Owner desconocido *antes* de agregarlo no se recogen solos si el
-checkpoint ya los paso (ver `/salesforce/lead-created` para procesarlos a mano).
+`tests/test_lead_segment_config.py` valida la lista real. Los leads que se
+quedaron con el Owner desconocido *antes* de agregarlo se recogen solos si se
+crearon dentro de las ultimas `POLL_LOOKBACK_HOURS` horas (ver "Revision hacia
+atras"). Los mas viejos hay que procesarlos a mano con `/salesforce/lead-created`.
 
 ## Reparto por pais (equipo Brasil vs equipo Latam)
 
@@ -187,7 +187,9 @@ semana y festivos no se filtra ni se envia nada.
 Antes del round-robin, en pools con **2 o mas personas** se descarta a quien
 no este conectado hoy, segun el `LoginHistory` de Salesforce:
 
-- **Tomas de asistencia**: `07:00` y `08:00` hora Bogota (`snapshot_times`).
+- **Tomas de asistencia**: `07:00`, `08:00` y `13:00` hora Bogota
+  (`snapshot_times`). Desde la toma de las 13:00 tambien entra al reparto
+  quien se conecto tarde en la mañana.
   En cada toma esta presente quien tenga un login valido entre las 00:00 del
   dia y esa hora **mas el margen** (`grace_minutes`, hoy **30**, para quien
   tenga alguna dificultad para conectarse: quien entre hasta las 8:30 cuenta
@@ -208,12 +210,18 @@ no este conectado hoy, segun el `LoginHistory` de Salesforce:
 
 ### Mensaje de asistencia en Slack
 
-Una vez por dia habil, cuando se cierra el margen de la toma (08:00 + 30 min =
-**8:30**), el bot publica la asistencia por equipo (Brasil, USA, Latam): quien
-esta conectado y desde que hora, quien no, y que regla de reparto aplica.
+Dos veces por dia habil, cuando se cierra el margen de cada toma (08:00 + 30
+min = **8:30**, y 13:00 + 30 min = **1:30 pm**), el bot publica la asistencia
+por equipo (Brasil, USA, Latam): quien esta conectado y desde que hora, quien
+no, y que regla de reparto aplica.
 
-- Toma(s) que generan mensaje: `report.snapshots` (hoy `["08:00"]`; agrega
-  `"07:00"` para recibir tambien uno a las 7:30).
+- Tomas que generan mensaje: `report.snapshots` (hoy `["08:00", "13:00"]`;
+  agrega `"07:00"` para recibir tambien uno a las 7:30). Cada una debe estar
+  tambien en `snapshot_times`, para que el mensaje y el reparto usen la misma
+  lista de conectados.
+- Ojo: `LoginHistory` solo registra entradas, no salidas. En la toma de la 1
+  pm cuenta como conectado quien entro en cualquier momento desde las 00:00,
+  aunque ya se haya ido.
 - Va al canal `ATTENDANCE_CHANNEL_ID` del `.env`; si esta vacio, al mismo
   canal de asignaciones (`LEAD_ASSIGNMENT_CHANNEL_ID` / `SLACK_TEST_CHANNEL_ID`).
 - **No se duplica** si el bot se reinicia (`attendance_report_state.json`, no
@@ -285,8 +293,49 @@ o desde el navegador en `http://localhost:8000/docs` → `POST
 3. Guarda en `poll_state.json` la fecha del ultimo Lead procesado, para que
    el proximo ciclo no vuelva a mirar los mismos.
 
-El intervalo y el tamaño de lote son configurables en `.env`
-(`POLL_INTERVAL_SECONDS`, `POLL_BATCH_SIZE`) sin tocar codigo.
+### Leads con error: el checkpoint no se traba
+
+- El checkpoint se detiene justo antes del primer Lead que dio error, para
+  reintentarlo en el siguiente ciclo (si lo pasara, ese Lead no se volveria a
+  consultar nunca).
+- Si ese Lead sigue fallando `POLL_MAX_LEAD_RETRIES` ciclos seguidos (default
+  5, ej. su equipo no tiene ningun usuario activo), el checkpoint lo pasa y el
+  Lead queda en `retry_lead_ids` dentro de `poll_state.json`. Desde ahi se
+  reintenta en cada ciclo, sin frenar a los Leads nuevos, y sale de la lista
+  en cuanto deja de fallar (se asigna, o alguien lo asigno a mano). Se loguea
+  como `ERROR` al pasarlo a la lista.
+- Los Leads que el proceso ya manejo sin error (por ejemplo, un `skipped` que
+  quedo detras de un error en el mismo lote) tampoco frenan el checkpoint.
+  Antes podian dejar el poller trabado sin avisar.
+
+### Revision hacia atras (leads que el checkpoint dejo atras)
+
+El checkpoint avanza por `CreatedDate`, asi que un Lead puede quedar atras
+sin que el bot lo haya visto nunca:
+
+- entro al segmento despues de creado (ej. el caso de `Store Integration`:
+  su owner se agrego tarde a `unassigned_owners`);
+- Salesforce lo confirmo despues de otro Lead mas nuevo que ya se habia
+  procesado, o dos Leads tienen el mismo `CreatedDate` y quedaron en ciclos
+  distintos;
+- se borro o se daño `poll_state.json` (el checkpoint vuelve a "ahora").
+
+Por eso, en cada ciclo el bot tambien busca Leads del segmento creados en las
+ultimas `POLL_LOOKBACK_HOURS` horas (default 72) con `CreatedDate` anterior o
+igual al checkpoint que **siguen sin asignar**, y los procesa junto con los
+nuevos (como maximo `POLL_BATCH_SIZE` por ciclo). Los que ya se asignaron no
+aparecen porque cambiaron de owner. Los que este proceso ya evaluo (por
+ejemplo, un `skipped` por filtro de calidad) no se vuelven a evaluar hasta el
+proximo reinicio. Cada recuperacion se loguea como `WARNING` ("recuperados por
+la revision"), asi se puede medir cuanto pasa. Si uno de estos da error, va a
+`retry_lead_ids`. `POLL_LOOKBACK_HOURS=0` lo desactiva.
+
+Ojo al activarlo por primera vez: asigna cualquier Lead del segmento de las
+ultimas 72 h que siga sin owner real.
+
+El intervalo, el tamaño de lote, los reintentos y la revision hacia atras son
+configurables en `.env` (`POLL_INTERVAL_SECONDS`, `POLL_BATCH_SIZE`,
+`POLL_MAX_LEAD_RETRIES`, `POLL_LOOKBACK_HOURS`) sin tocar codigo.
 
 ### Probar sin esperar el intervalo
 
