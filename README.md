@@ -152,6 +152,29 @@ tiene ningun usuario activo con ese Title, el lead queda `action=error` con
 el motivo explicito — nunca se asigna a ciegas ni cae a un owner por
 default.
 
+## Alcance por pais: solo Latam + Brasil + USA (2026-10-21)
+
+El bot es para Latam. Antes **no existia una lista de paises de Latam**: todo
+pais que no fuera Brasil/USA caia en el pool de Latam "por omision", y se
+asignaron leads de Argelia, Pakistan, India, Canada y Espana. Ahora
+`latam_country_keywords` en [team_routing.json](team_routing.json) define el
+alcance:
+
+- Se asigna solo si el pais contiene alguna palabra de `latam_country_keywords`,
+  `brasil_keywords` o `usa_keywords` (sin tildes/mayusculas; `Ciudad de Mexico,
+  Mexico` cuenta).
+- Cualquier otro pais se **omite** y el lead queda sin asignar (en el log:
+  `fuera del alcance del bot`). No genera error ni reintentos.
+- Un lead **sin pais** no se omite (no se puede saber; dejarlo sin dueno es
+  peor que asignarlo, y el post de Slack lo deja visible). Hoy ninguno llega sin
+  asignar: los crean vendedores a mano.
+- **Si aparece un pais de Latam que no esta en la lista, sus leads quedan
+  invisibles**: agregarlo. Hoy no estan Haiti, Belice, Guyana, Surinam ni
+  Jamaica (no llegaron leads de esos paises). Lista vacia/quitada = sin
+  restriccion.
+- `quality_filters.excluded_country_keywords` (Turquia, Vietnam, etc.) se
+  mantiene como segunda barrera.
+
 ## Reparto equitativo (round-robin) cuando hay varios owners por equipo
 
 [services/round_robin.py](services/round_robin.py) — cuando

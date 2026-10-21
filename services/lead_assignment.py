@@ -277,11 +277,43 @@ def _lead_matches_target_segment(lead: dict) -> Optional[str]:
             f"'{lead.get('utmSource__c')}', no coincide."
         )
 
+    scope_reason = _country_scope_rejection_reason(lead.get("Country_of_Residence__c"))
+    if scope_reason:
+        return scope_reason
+
     quality_reason = _quality_filter_rejection_reason(lead)
     if quality_reason:
         return quality_reason
 
     return None
+
+
+def _country_scope_rejection_reason(country: Optional[str]) -> Optional[str]:
+    """Alcance del bot: solo Latam (latam_country_keywords) + Brasil + USA.
+
+    Antes no existia esta lista: todo pais que no fuera Brasil/USA caia en
+    Latam por omision, y se asignaron leads de Argelia, Pakistan, India...
+    Ahora un pais fuera de alcance se OMITE (queda sin asignar). Sin lista
+    configurada = sin restriccion (compatibilidad). Un lead sin pais no se
+    omite: no se puede saber si es de Latam, y dejarlo sin dueno es peor que
+    asignarlo (el post de Slack lo deja visible para reasignarlo).
+    """
+    latam_keywords = team_routing.get("latam_country_keywords") or []
+    if not latam_keywords or not _normalized(country):
+        return None
+
+    in_scope_keywords = (
+        list(latam_keywords)
+        + list(team_routing.get("brasil_keywords") or [])
+        + list(team_routing.get("usa_keywords") or [])
+    )
+    if _contains_any(country, in_scope_keywords):
+        return None
+
+    return (
+        f"Pais '{country}' fuera del alcance del bot (solo Latam, Brasil y USA, "
+        "ver latam_country_keywords en team_routing.json) — se deja sin asignar."
+    )
 
 
 def _quality_filter_rejection_reason(lead: dict) -> Optional[str]:
