@@ -48,7 +48,7 @@
     "landing_page_required_keywords": [],
     "_comment_landing_required": "DESACTIVADO (2026-09-30): se encontro un lead real de Arabia Saudi valido que llego por 'openenglish.com/ar' (sin 'para-empresas' en la URL) y el filtro lo hubiera excluido por error. No se puede predecir todas las variantes regionales de URL sin mas datos. Vacio = no exigir nada. El resto de filtros (pais, email/company de prueba, utm de eventos, campana propia) siguen aplicando.",
 
-    "landing_page_excluded_keywords": ["leadform", "para-empresas/eventos/"],
+    "landing_page_excluded_keywords": ["leadform", "para-empresas/eventos/", "Empty"],
     "_comment_landing_excluded": "'leadform' es el formulario que llenan los vendedores directamente (esos leads ya nacen asignados a un vendedor real, no deberian llegar aqui, pero se excluye por seguridad). 'eventos' son leads de eventos presenciales.",
 
     "campaign_field_must_be_empty": true,
