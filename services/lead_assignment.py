@@ -306,6 +306,7 @@ def _country_scope_rejection_reason(country: Optional[str]) -> Optional[str]:
         list(latam_keywords)
         + list(team_routing.get("brasil_keywords") or [])
         + list(team_routing.get("usa_keywords") or [])
+        + [keyword for entry in _extra_countries() for keyword in (entry.get("keywords") or [])]
     )
     if _contains_any(country, in_scope_keywords):
         return None
@@ -423,11 +424,54 @@ def _configured_titles(plural_key: str, singular_key: str) -> list:
     return [single] if single else []
 
 
+_TEAM_TITLE_KEYS = {
+    "latam": ("default_titles", "default_title"),
+    "brasil": ("brasil_titles", "brasil_title"),
+    "usa": ("usa_titles", "usa_title"),
+}
+
+
+def _extra_countries() -> list:
+    """Paises que NO son de Latam pero el bot gestiona (lead_segment.json ->
+    extra_countries). Vacio si no hay la clave (compatibilidad)."""
+    return list(lead_segment.get("extra_countries") or [])
+
+
+def _extra_country_titles(country: Optional[str]) -> Optional[list]:
+    """Titles del equipo que atiende un pais extra, o None si el pais no es
+    uno de los extra. Cada entrada define 'team' ('latam'|'brasil'|'usa') o
+    'titles' (lista propia, para un equipo nuevo); si estan los dos manda
+    'titles'. Una entrada que coincide pero esta mal escrita devuelve [] (el
+    lead da error visible en vez de perderse), con un warning en el log."""
+    for entry in _extra_countries():
+        if not _contains_any(country, entry.get("keywords") or []):
+            continue
+
+        titles = entry.get("titles")
+        if titles:
+            return list(titles)
+
+        team = (entry.get("team") or "").strip().lower()
+        if team in _TEAM_TITLE_KEYS:
+            return _configured_titles(*_TEAM_TITLE_KEYS[team])
+
+        logger.warning(
+            "extra_countries: la entrada '%s' coincide con el pais '%s' pero su 'team' "
+            "('%s') no es valido (usar latam|brasil|usa) y no tiene 'titles'.",
+            entry.get("name"), country, entry.get("team"),
+        )
+        return []
+
+    return None
+
+
 def _target_titles_for_country(country: Optional[str]) -> list:
     """Resuelve que Titles de Salesforce trabajan el lead segun su pais. El
     owner se elige (round-robin) entre TODOS los usuarios activos que tengan
     cualquiera de esos Titles.
 
+    - Pais extra (lead_segment.json -> extra_countries, ej. Espana) -> el
+      equipo configurado ahi. Tiene prioridad sobre las reglas de abajo.
     - Brasil -> brasil_titles.
     - USA    -> usa_titles (solo (LT) (US)).
     - Resto de Latam -> default_titles ((LT) + (LT) (US) juntos).
@@ -440,6 +484,10 @@ def _target_titles_for_country(country: Optional[str]) -> list:
     team_routing.json.
     """
     normalized_country = _normalized(country)
+
+    extra_titles = _extra_country_titles(country)
+    if extra_titles is not None:
+        return extra_titles
 
     brasil_keywords = team_routing.get("brasil_keywords", [])
     if any(_normalized(keyword) in normalized_country for keyword in brasil_keywords if keyword):

@@ -175,6 +175,35 @@ alcance:
 - `quality_filters.excluded_country_keywords` (Turquia, Vietnam, etc.) se
   mantiene como segunda barrera.
 
+## Paises extra: gestionar un pais que NO es de Latam (2026-10-26)
+
+`extra_countries` en [lead_segment.json](lead_segment.json) lista los paises
+fuera de Latam que el bot SI debe gestionar y a que equipo van. Hoy:
+
+```json
+"extra_countries": [
+  { "name": "España", "keywords": ["espana", "spain"], "team": "latam" }
+]
+```
+
+- `keywords`: palabras que debe **contener** el pais del lead (sin
+  tildes/mayusculas: `espana` reconoce `España` y `Madrid, España`).
+- `team`: `latam` | `brasil` | `usa` — usa los titulos de ese equipo de
+  `team_routing.json` (con su round-robin y asistencia).
+- `titles`: alternativa a `team` para un equipo **nuevo** sin tocar codigo:
+  `"titles": ["Sales Development Representative - Inbound (XX)"]`. Si estan los
+  dos, manda `titles`.
+- Estas entradas van **antes** que las reglas de Brasil/USA/Latam y cuentan como
+  "dentro del alcance". Para agregar otro pais: copiar una entrada y cambiar
+  `name`/`keywords`/`team`.
+- Un `team` mal escrito no se pierde en silencio: warning en el log
+  (`extra_countries: ... no es valido`) y el lead da error visible (se reintenta).
+- **Ojo**: esto solo hace que el bot *acepte* ese pais. Para que el bot vea los
+  leads, estos deben llegar con un Owner de `unassigned_owners` (integracion /
+  cola de Brasil). Si otra regla de Salesforce los asigna antes (hoy casi todos
+  los de España quedan con Angie Galindo, Nicolas Ortiz, Facundo Orona...), el bot
+  nunca los llega a ver.
+
 ## Reparto equitativo (round-robin) cuando hay varios owners por equipo
 
 [services/round_robin.py](services/round_robin.py) — cuando

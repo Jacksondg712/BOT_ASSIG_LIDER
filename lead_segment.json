@@ -30,6 +30,15 @@
   "_comment_test_mode": "Modo prueba (dejar vacio '' para produccion): si se pone un valor, el bot SOLO procesa leads con ese utmSource__c exacto (se uso 'test' para probar con el reporte copia 'Copy Leads-Created-B2B_All-Unassigned_TE', Id 00OWP000005WQSj2AO). Vacio = cubre todo el trafico real.",
   "utm_source": "",
 
+  "_comment_extra_countries": "PAISES EXTRA (agregado 2026-10-26): paises que NO son de Latam pero el bot SI debe gestionar, y a que equipo van. Cada entrada: 'name' (solo para leerlo), 'keywords' (palabras que debe CONTENER el pais del lead, sin tildes/mayusculas: 'espana' tambien reconoce 'España', 'Madrid, España'), y UNO de: 'team' = 'latam' | 'brasil' | 'usa' (usa los titulos de ese equipo en team_routing.json) o 'titles' = [lista de Titles de Salesforce] para un equipo NUEVO sin tocar codigo. Si estan los dos, manda 'titles'. Estas entradas tienen prioridad sobre las reglas de Brasil/USA/Latam. Para agregar otro pais: copiar una entrada y cambiar name/keywords/team. Un 'team' mal escrito se loguea como warning y el lead da error (visible), no se pierde en silencio.",
+  "extra_countries": [
+    {
+      "name": "España",
+      "keywords": ["espana", "spain"],
+      "team": "latam"
+    }
+  ],
+
   "_comment_quality_filters": "PRODUCCION (2026-09-30): exclusiones de calidad de dato que SI tenia el reporte original y el bot no replicaba mientras estaba en modo prueba. Todas las comparaciones son 'contiene' (o 'no contiene'), sin tildes/mayusculas — no igualdad exacta, porque los campos de texto libre llegan inconsistentes.",
   "quality_filters": {
     "email_company_excluded_keywords": ["test", "openenglish"],
