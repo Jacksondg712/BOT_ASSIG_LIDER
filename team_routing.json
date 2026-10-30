@@ -6,7 +6,7 @@
   "brasil_keywords": ["brazil", "brasil"],
 
   "_comment_usa": "Estados Unidos: SOLO lo trabajan los usuarios con el titulo (LT) (US). Mismo criterio de deteccion 'contiene' que Brasil, por la misma inconsistencia de datos (ej. 'USA', 'United States', 'Estados Unidos de America').",
-  "usa_titles": ["Sales Development Representative - Inbound (LT) (US)"],
+  "usa_titles": ["Sales Development Representative - Inbound (BR)"],
   "usa_keywords": ["usa", "united states", "estados unidos", "eeuu", "ee.uu"],
 
   "_comment_latam_scope": "ALCANCE del bot (agregado 2026-10-21): solo se asignan leads de Latam (esta lista) + Brasil + USA. Un lead de cualquier otro pais (Argelia, Pakistan, India, Canada, Turquia...) se OMITE y se queda sin asignar. Antes NO existia esta lista y todo pais que no fuera Brasil/USA caia en Latam por omision. Mismo criterio 'contiene' sin tildes/mayusculas (ej. 'Ciudad de Mexico, Mexico' cuenta). Un pais que falte aqui hace INVISIBLES a sus leads: si aparece un pais de Latam nuevo, agregarlo. Para gestionar un pais que NO es de Latam (ej. Espana) NO se agrega aqui: va en 'extra_countries' de lead_segment.json, con el equipo que lo atiende. Lista vacia/quitada = sin restriccion. Un lead SIN pais no se omite (no se puede saber).",
@@ -18,8 +18,5 @@
   ],
 
   "_comment_default": "Resto de Latam (todo pais que NO matchee brasil_keywords ni usa_keywords, y que este en latam_country_keywords): lo trabajan por igual los usuarios (LT) y los (LT) (US) — estos ultimos entran al reparto de Latam ademas de ser los unicos que reciben USA.",
-  "default_titles": [
-    "Sales Development Representative - Inbound (LT)",
-    "Sales Development Representative - Inbound (LT) (US)"
-  ]
+  "default_titles": ["Sales Development Representative - Inbound (BR)"]
 }
