@@ -18,7 +18,22 @@ class SalesforceAuthError(RuntimeError):
 
 
 class SalesforceApiError(RuntimeError):
-    pass
+    """`error_code` es el errorCode que devuelve Salesforce (ej.
+    ENTITY_IS_LOCKED), o None si la respuesta no lo trae."""
+
+    def __init__(self, message: str, error_code: Optional[str] = None):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+def _error_code(response: httpx.Response) -> Optional[str]:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        return payload[0].get("errorCode")
+    return None
 
 
 @dataclass
@@ -409,7 +424,11 @@ class SalesforceClient:
                 response.status_code,
                 response.text[:500],
             )
-            raise SalesforceApiError(f"Salesforce API error {response.status_code}")
+            error_code = _error_code(response)
+            raise SalesforceApiError(
+                f"Salesforce API error {response.status_code}" + (f" ({error_code})" if error_code else ""),
+                error_code=error_code,
+            )
 
         return response
 

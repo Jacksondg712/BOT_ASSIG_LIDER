@@ -155,7 +155,24 @@ async def _process_lead(lead_id: str) -> LeadAssignmentResult:
             reason=f"El lead ya pertenece a {owner_name}; no fue necesario actualizar OwnerId.",
         )
 
-    updated = await salesforce.update_lead_owner(lead_id, owner_id)
+    try:
+        updated = await salesforce.update_lead_owner(lead_id, owner_id)
+    except SalesforceApiError as exc:
+        if exc.error_code != "ENTITY_IS_LOCKED":
+            raise
+        # Salesforce bloqueo el registro (aprobacion o bloqueo de un proceso
+        # propio del org; visto con leads de Venezuela, que el usuario de
+        # integracion bloquea segundos despues de crearlos). El usuario del
+        # bot no puede editarlo y reintentar no sirve: se omite (no frena el
+        # checkpoint ni se reintenta cada ciclo) y se avisa en el canal para
+        # que alguien lo asigne o lo desbloquee a mano.
+        reason = (
+            f"Salesforce tiene el Lead bloqueado (ENTITY_IS_LOCKED): no se puede "
+            f"cambiar el owner. Le tocaba a {owner_name}; hay que desbloquearlo "
+            f"o asignarlo a mano."
+        )
+        await _notify_locked(lead, owner_name)
+        return LeadAssignmentResult(lead_id=lead_id, lead_name=lead_name, action="skipped", reason=reason)
     if not updated:
         return LeadAssignmentResult(
             lead_id=lead_id,
@@ -228,6 +245,31 @@ async def _notify_assignment(lead: dict, owner: dict, reason: str) -> None:
             )
     except Exception:
         logger.exception("[SLACK] Error inesperado notificando por Slack el lead %s", lead_id)
+
+
+async def _notify_locked(lead: dict, intended_owner_name: str) -> None:
+    """Aviso en el canal de que un Lead no se pudo asignar porque Salesforce
+    lo tiene bloqueado. Nunca lanza."""
+    channel = settings.notification_channel_id
+    if not settings.slack_notifications_enabled or not channel:
+        return
+
+    lead_id = lead.get("Id", "")
+    lead_name = lead.get("Name") or lead_id
+    url = lead_url(settings.salesforce_base_url, lead_id)
+    text = (
+        f":lock: *Lead bloqueado en Salesforce — no se pudo asignar*\n"
+        f"*Lead:* <{url}|{lead_name}>\n"
+        f"*País:* {lead.get('Country_of_Residence__c') or '-'}\n"
+        f"*Le tocaba a:* {intended_owner_name}\n"
+        "Salesforce no deja cambiar el owner de este registro (ENTITY_IS_LOCKED). "
+        "Hay que asignarlo a mano o pedir a un admin que lo desbloquee."
+    )
+    try:
+        ok = await slack.post_message(channel, text)
+        logger.info("[SLACK] Aviso de lead bloqueado %s en canal %s: %s.", lead_id, channel, "OK" if ok else "FALLO")
+    except Exception:
+        logger.exception("[SLACK] Error avisando el lead bloqueado %s", lead_id)
 
 
 def _lead_details(lead: dict) -> dict:
