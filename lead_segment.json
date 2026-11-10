@@ -36,7 +36,10 @@
       "name": "España",
       "keywords": ["espana", "spain"],
       "team": "latam"
-    }
+    },
+    { "name": "Canadá",
+     "keywords": ["canada"],
+      "team": "usa" }
   ],
 
   "_comment_quality_filters": "PRODUCCION (2026-09-30): exclusiones de calidad de dato que SI tenia el reporte original y el bot no replicaba mientras estaba en modo prueba. Todas las comparaciones son 'contiene' (o 'no contiene'), sin tildes/mayusculas — no igualdad exacta, porque los campos de texto libre llegan inconsistentes.",
